@@ -132,7 +132,7 @@ body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); 
 .lb-inner{ width:100%; max-width:min(1400px, 100vw); height:min(96vh, 980px); }
 .lb-stage{ height:100%; display:grid; grid-template-rows: 4fr 1fr; gap:10px; min-height:0; }
 .mainWrap{ position:relative; min-height:0; border-radius:var(--r-lg); overflow:hidden; background:transparent; box-shadow:0 18px 50px rgba(0,0,0,.35); padding:0; border:1px solid rgba(255,255,255,.10); }
-.lb-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:var(--r-lg); background:transparent; display:block; transform-origin:50% 50%; transition:transform .12s ease; will-change:transform; opacity:0; }
+.lb-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain; border-radius:var(--r-lg); background:#000; display:block; transform-origin:50% 50%; transition:transform .12s ease; will-change:transform; opacity:0; touch-action:none; }
 .lb-img.isActive{ opacity: 1; }
 body.immersive .lb-img{ transition: transform .12s ease, opacity .28s ease; }
 
