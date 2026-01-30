@@ -177,6 +177,8 @@ body.immersive #lbMeta{ display:block; }
 .bubbleTile img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; position:relative; z-index:2; }
 .bubbleTile::before{ content:''; position:absolute; inset:-2px; border-radius:inherit; background:conic-gradient(from 180deg at 50% 50%, rgba(0,255,170,.95), rgba(0,170,255,.95), rgba(167,139,250,.95), rgba(255,0,153,.95), rgba(255,214,0,.95), rgba(0,255,170,.95)); filter: blur(12px); opacity:.20; z-index:0; pointer-events:none; }
 .bubbleTile::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); z-index:1; pointer-events:none; }
+.bubbleTile.circle, .bubbleTile.circle img{ border-radius:999px !important; }
+.bubbleTile.ellipse, .bubbleTile.ellipse img{ border-radius:999px !important; }
 
 /* collage mode */
 .collage{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; padding:10px; }
