@@ -556,10 +556,11 @@
   on('lbNext','click', (e) => { e.preventDefault(); e.stopPropagation(); nextLb(); });
   on('lb','click', (e) => { if (e.target === $('lb')) closeLb(); });
 
+  const lb = $('lb');
+
   // show controls on interaction, then hide after a delay
   let lbCtlTimer = 0;
   function showLbControls(){
-    const lb = $('lb');
     if (!lb || !lb.classList.contains('open')) return;
     lb.classList.remove('ctlHide');
     try { if (lbCtlTimer) clearTimeout(lbCtlTimer); } catch {}
@@ -569,15 +570,16 @@
       lb.classList.add('ctlHide');
     }, 2000);
   }
-  for (const ev of ['pointerdown','pointermove','touchstart','wheel','keydown']) {
-    lb.addEventListener(ev, showLbControls, { passive:true });
+  if (lb) {
+    for (const ev of ['pointerdown','pointermove','touchstart','wheel','keydown']) {
+      lb.addEventListener(ev, showLbControls, { passive:true });
+    }
   }
 
   // lightbox zoom (wheel + double click) and pan (drag when zoomed)
-  const lb = $('lb');
   if (lb) {
     lb.addEventListener('wheel', (e) => {
-      if (!$('lb') || !$('lb').classList.contains('open')) return;
+      if (!lb.classList.contains('open')) return;
       // prevent page scroll while zooming
       e.preventDefault();
       const img = getActiveImg();
