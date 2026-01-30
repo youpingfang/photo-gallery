@@ -238,8 +238,9 @@
 
     // shape sprinkle (middle band only)
     const inMiddle = (globalIndex >= 2) && (globalIndex <= totalCount - 3);
-    if (inMiddle && rr < 0.22) tile.classList.add('circle', 'r1');
-    else if (inMiddle && rr < 0.60) tile.classList.add('ellipse', 'r2');
+    // shape ratio: 25% circle + 25% ellipse (only for middle band)
+    if (inMiddle && rr < 0.25) tile.classList.add('circle', 'r1');
+    else if (inMiddle && rr < 0.50) tile.classList.add('ellipse', 'r2');
     else tile.classList.add('r' + ((h % 6) + 1));
 
     // edge effects
@@ -772,8 +773,9 @@
 
         // mild shape variety
         const inMiddle = (i >= 2) && (i <= files.length - 3);
-        if (inMiddle && rr < 0.22) el.classList.add('circle');
-        else if (inMiddle && rr < 0.60) el.classList.add('ellipse');
+        // shape ratio: 25% circle + 25% ellipse (only for middle band)
+        if (inMiddle && rr < 0.25) el.classList.add('circle');
+        else if (inMiddle && rr < 0.50) el.classList.add('ellipse');
 
         let w = baseW;
         let hpx = Math.round(baseW * 1.25);
