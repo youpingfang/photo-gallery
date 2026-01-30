@@ -806,7 +806,7 @@
     if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (mode === 'bubble') ? 'flex' : 'none';
     if ($('collageHint')) $('collageHint').style.display = (mode === 'collage') ? 'flex' : 'none';
     if ($('colsWrap')) $('colsWrap').style.display = (mode === 'masonry') ? 'flex' : 'none';
-    if ($('modeQuick')) $('modeQuick').textContent = modeLabel(mode);
+    if ($('modeQuick')) $('modeQuick').textContent = '模式·' + modeLabel(mode);
   }
 
   function setViewMode(next){
