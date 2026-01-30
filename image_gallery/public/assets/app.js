@@ -993,52 +993,60 @@
 
       function setTileImg(tile, file){
         if (!tile || !file) return;
-        const img = tile.querySelector('img');
-        if (!img) return;
+        const a = tile.querySelector('.cImg.a');
+        const b = tile.querySelector('.cImg.b');
+        if (!a || !b) return;
+
+        const curOnA = a.classList.contains('on');
+        const activeImg = curOnA ? a : b;
+        const nextImg = curOnA ? b : a;
+
         const oldName = tile.getAttribute('data-name') || '';
         if (oldName) activeNames.delete(oldName);
         tile.setAttribute('data-name', file.name);
         activeNames.add(file.name);
 
-        // Avoid "blank tile" if onload doesn't fire (cached/blocked) by:
-        // 1) setting a timeout to force-show
-        // 2) falling back from thumbUrl -> url on error
-        img.classList.remove('on');
-        let forced = false;
-        const forceShow = () => {
-          if (forced) return;
-          forced = true;
-          img.classList.add('on');
-        };
-        const forceTimer = setTimeout(forceShow, 300);
-
         const primary = file.thumbUrl || file.url;
         const fallback = file.url;
 
-        img.onload = () => {
-          clearTimeout(forceTimer);
-          // next frame so transition is reliable
-          requestAnimationFrame(forceShow);
+        // prepare next image (start hidden)
+        nextImg.classList.remove('on');
+
+        let swapped = false;
+        const doSwap = () => {
+          if (swapped) return;
+          swapped = true;
+          // fade in next, fade out active
+          nextImg.classList.add('on');
+          activeImg.classList.remove('on');
         };
-        img.onerror = () => {
+
+        const forceTimer = setTimeout(doSwap, 500);
+
+        nextImg.onload = () => {
           clearTimeout(forceTimer);
-          // if thumb failed, try original image once
-          if (img.src && img.src.includes('/api/thumb') && fallback) {
-            img.src = fallback;
-            setTimeout(forceShow, 200);
+          requestAnimationFrame(doSwap);
+        };
+        nextImg.onerror = () => {
+          clearTimeout(forceTimer);
+          if (String(nextImg.src || '').includes('/api/thumb') && fallback) {
+            nextImg.src = fallback;
+            // allow a bit of time then swap even if load event is flaky
+            setTimeout(doSwap, 300);
           } else {
-            forceShow();
+            doSwap();
           }
         };
 
-        img.src = primary;
+        nextImg.src = primary;
       }
 
       const tiles = [];
       for (let i=0; i<classes.length; i++) {
         const t = document.createElement('div');
         t.className = 'cTile ' + classes[i];
-        t.innerHTML = '<img alt="" />';
+        // double-buffered images for smooth crossfade
+        t.innerHTML = '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />';
         const f = pickNext('');
         setTileImg(t, f);
         t.addEventListener('click', () => {
