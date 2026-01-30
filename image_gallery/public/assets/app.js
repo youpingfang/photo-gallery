@@ -1021,21 +1021,21 @@
           activeImg.classList.remove('on');
         };
 
-        const forceTimer = setTimeout(doSwap, 500);
-
-        nextImg.onload = () => {
-          clearTimeout(forceTimer);
+        // Only swap after the next image is actually ready.
+        // (Avoid swapping to a blank tile when network/cache is slow.)
+        nextImg.onload = async () => {
+          try {
+            // decode helps avoid a white flash on some browsers
+            if (nextImg.decode) await nextImg.decode();
+          } catch {}
           requestAnimationFrame(doSwap);
         };
         nextImg.onerror = () => {
-          clearTimeout(forceTimer);
+          // if thumb failed, try original image once
           if (String(nextImg.src || '').includes('/api/thumb') && fallback) {
             nextImg.src = fallback;
-            // allow a bit of time then swap even if load event is flaky
-            setTimeout(doSwap, 300);
-          } else {
-            doSwap();
           }
+          // if fallback also fails, keep current image (do not swap)
         };
 
         nextImg.src = primary;
