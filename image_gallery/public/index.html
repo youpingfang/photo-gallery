@@ -8,6 +8,13 @@
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
 
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b0f1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
   <link rel="stylesheet" href="/assets/styles.css?b=__BUILD_ID__" />
   <script src="/assets/vendor/matter.min.js"></script>
 </head>
@@ -143,5 +150,14 @@
   <input id="file" type="file" accept="image/*" multiple style="display:none" />
 
   <script src="/assets/app.js?b=__BUILD_ID__"></script>
+  <script>
+    // Register service worker for installability (no aggressive caching)
+    (function(){
+      if (!('serviceWorker' in navigator)) return;
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('/sw.js').catch(function(){});
+      });
+    })();
+  </script>
 </body>
 </html>
