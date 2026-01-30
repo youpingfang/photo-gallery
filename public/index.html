@@ -30,10 +30,15 @@
   <div id="dirs" style="display:none"></div>
 
   <!-- floating buttons -->
+  <!-- top-right theme toggle (minimal, like reference) -->
+  <button id="themeTop" class="themeTop" title="切换亮/暗" aria-label="切换亮/暗">
+    <span id="themeTopIcon" class="themeTopIcon">☀︎</span>
+  </button>
+
   <div class="fab" id="fab">
     <button id="modeQuick" title="切换模式" aria-label="切换模式">模式</button>
-    <button id="settingsBtn" title="配置" aria-label="配置">⚙️</button>
-    <button id="uploadBtn" title="上传" aria-label="上传">＋</button>
+    <button id="settingsBtn" title="配置" aria-label="配置">⚙︎</button>
+    <button id="uploadBtn" title="上传" aria-label="上传">⬆︎</button>
     <button id="playPref" title="自动播放" aria-label="自动播放">▶</button>
   </div>
 
@@ -65,10 +70,12 @@
           <div id="hintSwipe" class="hint" style="left:50%;top:14px;transform:translate(-50%,6px);">左右滑动切换 · 双击/双指放大</div>
           <div id="hintThumbs" class="hint" style="left:50%;bottom:78px;transform:translate(-50%,6px);">底部滑动选图</div>
         </div>
-        <div class="thumbs" id="thumbs"></div>
+        <div class="thumbsBar" id="thumbsBar">
+          <!-- 拍摄信息已移除 -->
+          <div class="thumbs" id="thumbs"></div>
+        </div>
       </div>
       <div id="apProg" aria-hidden="true"><div id="apProgBar"></div></div>
-      <div id="lbMeta" style="display:none"></div>
       <a id="lbOpen" target="_blank" rel="noreferrer" style="display:none;">open</a>
       <div id="lbName" style="display:none"></div>
     </div>
@@ -76,13 +83,63 @@
 
   <!-- settings modal -->
   <div class="lb" id="settings" style="background:rgba(0,0,0,.55)">
-    <div class="lb-inner" style="max-width:520px; height:auto;">
+    <div class="lb-inner lb-inner-settings">
       <div class="settingsCard">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
           <div style="font-weight:900;">设置</div>
           <a href="#" id="settingsClose" style="color:var(--accent);text-decoration:none;">关闭</a>
         </div>
         <div style="margin-top:10px;color:rgba(255,255,255,.45);font-size:12px;">Build: <span id="buildId">…</span></div>
+
+        <div class="setSection adminOnly" id="adminUnlock">
+          <div class="setTitle">管理密码</div>
+          <div class="setRow">
+            <div class="setLabel">密码</div>
+            <input id="adminPass" type="password" placeholder="ADMIN_PASS" style="width:180px;min-width:180px;" />
+          </div>
+          <div class="setRow">
+            <div class="setLabel">操作</div>
+            <button id="adminUnlockBtn" class="btnPrimary">解锁设置</button>
+          </div>
+          <div class="setRow">
+            <div class="setHelp">提示：管理员密码只在服务端环境变量配置。这里输入用于解锁本次会话。</div>
+          </div>
+        </div>
+
+        <div class="setSection adminOnly" id="dataSourceSec">
+          <div class="setTitle">数据源</div>
+          <div class="setRow">
+            <div class="setLabel">来源</div>
+            <select id="sourceMode" class="sel" style="width:180px;">
+              <option value="auto">自动（本地为空时用远程）</option>
+              <option value="local">本地</option>
+              <option value="dav">远程 WebDAV</option>
+            </select>
+          </div>
+          <div class="setRow">
+            <div class="setLabel">WebDAV</div>
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input id="webdavEnabled" type="checkbox" />
+              <span style="color:rgba(255,255,255,.72);font-size:13px;">启用</span>
+            </label>
+          </div>
+          <div class="setRow">
+            <div class="setLabel">URL</div>
+            <input id="webdavUrl" placeholder="https://.../dav/photos/" style="width:260px;min-width:260px;" />
+          </div>
+          <div class="setRow">
+            <div class="setLabel">用户名</div>
+            <input id="webdavUser" placeholder="username" style="width:180px;min-width:180px;" />
+          </div>
+          <div class="setRow">
+            <div class="setLabel">密码</div>
+            <input id="webdavPass" type="password" placeholder="password" style="width:180px;min-width:180px;" />
+          </div>
+          <div class="setRow">
+            <div class="setLabel">应用</div>
+            <div class="setHelp">保存后立即生效；本地为空时会自动切到远程。</div>
+          </div>
+        </div>
 
         <div class="setSection">
           <div class="setTitle">视图</div>
@@ -119,13 +176,7 @@
           </div>
         </div>
 
-        <div class="setSection">
-          <div class="setTitle">信息</div>
-          <div class="setRow">
-            <div class="setLabel">拍摄信息</div>
-            <button id="metaToggle" class="btnGhost">信息：关</button>
-          </div>
-        </div>
+        <!-- 拍摄信息功能已移除 -->
 
         <div class="setSection">
           <div class="setTitle">管理</div>
@@ -133,10 +184,7 @@
             <div class="setLabel">口令</div>
             <input id="uploadToken" type="password" placeholder="UPLOAD_TOKEN（可留空）" style="width:180px;min-width:180px;" />
           </div>
-          <div class="setRow">
-            <div class="setLabel">上传</div>
-            <button id="uploadInSettings" class="btnGhost">上传</button>
-          </div>
+          <!-- 上传按钮已移到右下角浮动按钮，设置里不再重复 -->
           <div class="setRow">
             <div class="setLabel">删除</div>
             <button id="enterDelete" class="btnDanger">删除模式</button>

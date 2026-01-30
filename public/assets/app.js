@@ -62,6 +62,16 @@
     else if (v === '1') bubbleMode = true;
   } catch {}
 
+  // theme: dark | light (two modes)
+  // default: light for first-time users
+  let themeMode = 'light';
+  try {
+    const raw = localStorage.getItem('gallery_theme');
+    const tm = (raw == null ? 'light' : raw).toString();
+    if (tm === 'light' || tm === 'dark') themeMode = tm;
+    // migration: old "system" treated as light
+  } catch {}
+
   // view mode: bubble | masonry | collage
   let viewMode = 'bubble';
   try {
@@ -77,8 +87,7 @@
     if (!isNaN(bc)) bubbleCount = bc;
   } catch {}
 
-  let metaEnabled = false;
-  try { metaEnabled = (localStorage.getItem('gallery_meta') === '1'); } catch {}
+  // metaEnabled (shooting info) feature removed
 
   // selection
   let selectMode = false;
@@ -87,6 +96,43 @@
   // upload/delete token (client-side)
   function getUploadToken(){
     try { return (localStorage.getItem('gallery_upload_token') || '').trim(); } catch { return ''; }
+  }
+
+  // admin pass (session-scoped)
+  function getAdminPass(){
+    try { return (sessionStorage.getItem('gallery_admin_pass') || '').trim(); } catch { return ''; }
+  }
+  function setAdminPass(v){
+    try { sessionStorage.setItem('gallery_admin_pass', String(v||'').trim()); } catch {}
+  }
+
+  // source mode
+  function getSourceMode(){
+    try { return (localStorage.getItem('gallery_source_mode') || 'auto').trim(); } catch { return 'auto'; }
+  }
+  function setSourceMode(v){
+    try { localStorage.setItem('gallery_source_mode', String(v||'auto')); } catch {}
+  }
+
+  function getWebdavCfg(){
+    try {
+      return {
+        enabled: localStorage.getItem('gallery_webdav_enabled') === '1',
+        url: (localStorage.getItem('gallery_webdav_url') || '').trim(),
+        user: (localStorage.getItem('gallery_webdav_user') || '').trim(),
+        pass: (localStorage.getItem('gallery_webdav_pass') || '').trim(),
+      };
+    } catch {
+      return { enabled:false, url:'', user:'', pass:'' };
+    }
+  }
+  function setWebdavCfg(cfg){
+    try {
+      localStorage.setItem('gallery_webdav_enabled', cfg.enabled ? '1' : '0');
+      localStorage.setItem('gallery_webdav_url', String(cfg.url||''));
+      localStorage.setItem('gallery_webdav_user', String(cfg.user||''));
+      localStorage.setItem('gallery_webdav_pass', String(cfg.pass||''));
+    } catch {}
   }
 
   // likes
@@ -217,13 +263,7 @@
     if ($('bubbleModeBtn')) $('bubbleModeBtn').textContent = '泡泡布局：' + (bubbleMode ? '开' : '关');
   }
 
-  function setMetaEnabled(on){
-    metaEnabled = !!on;
-    try { localStorage.setItem('gallery_meta', metaEnabled ? '1' : '0'); } catch {}
-    if ($('metaToggle')) $('metaToggle').textContent = '信息：' + (metaEnabled ? '开' : '关');
-    const meta = $('lbMeta');
-    if (meta && !metaEnabled) { meta.classList.remove('show'); meta.style.display = 'none'; }
-  }
+  // setMetaEnabled removed
 
   // --- paging (masonry) ---
   function ensureObserver(){
@@ -343,7 +383,10 @@
     try {
       const seed = (viewMode === 'masonry') ? (window.__masonrySeed || (window.__masonrySeed = String(Date.now()))) : '';
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
-      const r2 = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+
+      const src = (window.__activeSource || 'local');
+      const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
+      const r2 = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order, {}, { webdav: (src === 'dav') });
       const d2 = await r2.json();
       if (d2.error) throw new Error(d2.error);
 
@@ -394,6 +437,14 @@
       const img = getActiveImg();
       if (!img) return;
       img.style.transform = 'translate3d(' + panX + 'px,' + panY + 'px,0) scale(' + zoom + ')';
+      const z = zoom > 1.02;
+      try {
+        document.body.classList.toggle('lbZoomed', z);
+      } catch {}
+      if (z) {
+        // when user wants details, force upgrade to full-res
+        ensureFullRes(img);
+      }
     });
   }
 
@@ -437,38 +488,23 @@
     apRaf = requestAnimationFrame(tick);
   }
 
-  async function updateMetaOverlay(){
-    const meta = $('lbMeta');
-    if (!meta) return;
-    if (!metaEnabled || !$('lb').classList.contains('open')) {
-      meta.classList.remove('show');
-      meta.style.display = 'none';
-      return;
-    }
-    const f = currentFiles[currentIndex];
-    if (!f) return;
+  // updateMetaOverlay removed (shooting info feature removed)
 
-    meta.style.display = 'block';
-    meta.textContent = '读取中…';
-    meta.classList.add('show');
-
+  function ensureFullRes(imgEl){
     try {
-      const r = await fetch('/api/meta?dir=' + encodeURIComponent(currentDir || '') + '&name=' + encodeURIComponent(f.name));
-      const j = await r.json();
-      const parts = [];
-      if (j.takenAt) {
-        const d = new Date(j.takenAt);
-        parts.push(!isNaN(d.getTime()) ? d.toLocaleString() : String(j.takenAt));
-      }
-      if (j.place) {
-        const segs = String(j.place).split(',').map(s => s.trim()).filter(Boolean);
-        // 只保留景区/POI（第一段），避免显示一长串地址
-        if (segs.length) parts.push(segs[0]);
-      }
-      meta.textContent = parts.filter(Boolean).join(' · ') || '暂无信息';
-    } catch {
-      meta.textContent = '暂无信息';
-    }
+      const fullUrl = imgEl?.dataset?.fullUrl || '';
+      if (!fullUrl) return;
+      if (imgEl.src === fullUrl) return;
+      // begin upgrade
+      const full = new Image();
+      full.decoding = 'async';
+      full.src = fullUrl;
+      full.onload = () => {
+        // only upgrade if still showing same image
+        const active = getActiveImg();
+        if (active === imgEl) imgEl.src = fullUrl;
+      };
+    } catch {}
   }
 
   function showLbInternal(index){
@@ -484,6 +520,10 @@
     // blurred background to avoid black bars when using object-fit:contain
     const bg = $('lbBg');
     if (bg) bg.src = f.url;
+
+    // prefer instant preview: show thumb first, then upgrade to full-res
+    const thumbUrl = f.thumbUrl || f.url;
+    const fullUrl = f.url;
 
     // auto-hide controls a moment after opening
     lb.classList.remove('ctlHide');
@@ -501,13 +541,21 @@
 
       if (autoplayEnabled && autoplayRunning) { apFrom = 0; apSet(0); }
 
+      // annotate urls on element for later upgrades (e.g., when zooming)
+      try {
+        nextImg.dataset.thumbUrl = thumbUrl;
+        nextImg.dataset.fullUrl = fullUrl;
+      } catch {}
+
       nextImg.addEventListener('load', () => {
         swapActiveImg(nextImg);
         resetZoom();
+        // after showing thumb, upgrade to full-res in background
+        ensureFullRes(nextImg);
         if (autoplayEnabled && autoplayRunning) apStartShown();
       }, { once:true });
 
-      nextImg.src = f.url;
+      nextImg.src = thumbUrl;
     } else {
       const img = getActiveImg();
       if (img) img.src = f.url;
@@ -521,7 +569,6 @@
 
     $('lbOpen').href = f.url;
     renderThumbs();
-    updateMetaOverlay();
   }
 
   function openLb(index){
@@ -799,12 +846,38 @@
 
   // settings modal toggle
   const settings = $('settings');
+  function isAdminUnlocked(){
+    return !!getAdminPass();
+  }
+  function syncSettingsLockUI(){
+    const unlocked = isAdminUnlocked();
+    // hide all adminOnly sections when locked
+    document.querySelectorAll('.adminOnly').forEach(el => {
+      el.style.display = unlocked ? '' : 'none';
+    });
+    // show unlock section only when locked
+    if ($('adminUnlock')) $('adminUnlock').style.display = unlocked ? 'none' : '';
+  }
+
   function openSettings(){
     settings.classList.add('open');
+
     // init token field
     if ($('uploadToken')) {
       try { $('uploadToken').value = getUploadToken(); } catch {}
     }
+
+    // init webdav/source UI
+    if ($('sourceMode')) {
+      try { $('sourceMode').value = getSourceMode(); } catch {}
+    }
+    const dav = getWebdavCfg();
+    if ($('webdavEnabled')) $('webdavEnabled').checked = !!dav.enabled;
+    if ($('webdavUrl')) $('webdavUrl').value = dav.url || '';
+    if ($('webdavUser')) $('webdavUser').value = dav.user || '';
+    if ($('webdavPass')) $('webdavPass').value = dav.pass || '';
+
+    syncSettingsLockUI();
     showFab();
   }
   function closeSettings(){ settings.classList.remove('open'); showFab(); }
@@ -816,6 +889,21 @@
   on('cancelSettings','click', (e) => { e.preventDefault(); closeSettings(); });
   if (settings) settings.addEventListener('click', (e) => { if (e.target === settings) closeSettings(); });
   document.addEventListener('keydown', (e) => { if (settings.classList.contains('open') && e.key === 'Escape') closeSettings(); });
+
+  // admin unlock
+  on('adminUnlockBtn','click', async (e) => {
+    e.preventDefault();
+    const p = ($('adminPass') ? $('adminPass').value : '').trim();
+    if (!p) { alert('请输入管理员密码'); return; }
+    // best-effort verify by calling a protected endpoint
+    try {
+      const r = await fetch('/api/dav/images?dir=&offset=0&limit=1', { headers: { 'x-admin-pass': p } });
+      // We accept 400 (missing webdav config) as "password ok".
+      if (r.status === 401) { alert('密码不正确'); return; }
+    } catch {}
+    setAdminPass(p);
+    syncSettingsLockUI();
+  });
 
   // apply cols
   function applyCols(cols){
@@ -854,6 +942,20 @@
       try { localStorage.setItem('gallery_upload_token', String($('uploadToken').value || '').trim()); } catch {}
     }
 
+    // WebDAV + source mode (admin only)
+    if (!isAdminUnlocked()) {
+      // allow saving non-admin options, but do not apply admin settings
+    } else {
+      if ($('sourceMode')) setSourceMode($('sourceMode').value || 'auto');
+      const cfg = {
+        enabled: !!($('webdavEnabled') && $('webdavEnabled').checked),
+        url: ($('webdavUrl') ? $('webdavUrl').value : '').trim(),
+        user: ($('webdavUser') ? $('webdavUser').value : '').trim(),
+        pass: ($('webdavPass') ? $('webdavPass').value : '').trim(),
+      };
+      setWebdavCfg(cfg);
+    }
+
     closeSettings();
     await load(currentDir);
   });
@@ -873,10 +975,25 @@
   });
 
   // mode selector
+  function themeLabel(tm){
+    if (tm === 'light') return '亮色';
+    return '暗黑';
+  }
+  function applyTheme(tm){
+    const t = (tm === 'light' || tm === 'dark') ? tm : 'light';
+    themeMode = t;
+    try { localStorage.setItem('gallery_theme', themeMode); } catch {}
+    document.body.classList.remove('themeLight');
+    if (themeMode === 'light') document.body.classList.add('themeLight');
+
+    // sync top-right icon
+    if ($('themeTopIcon')) $('themeTopIcon').textContent = (themeMode === 'light') ? '☀︎' : '☾';
+  }
+
   function modeLabel(vm){
     if (vm === 'bubble') return '泡泡';
     if (vm === 'collage') return '拼贴';
-    if (vm === 'masonry') return '瀑布流';
+    if (vm === 'masonry') return '瀑布';
     return '泡泡';
   }
   function syncModeUI(vm){
@@ -921,6 +1038,13 @@
     });
   }
 
+  // top-right theme toggle (two modes)
+  applyTheme(themeMode);
+  on('themeTop','click', (e) => {
+    e.preventDefault();
+    applyTheme(themeMode === 'light' ? 'dark' : 'light');
+  });
+
   // bubble count input
   if ($('bubbleCount')) {
     const def = (isMobileLike() ? 20 : 25);
@@ -932,10 +1056,7 @@
       // preview-only; apply happens on "保存并应用"
     });
   }
-  if ($('metaToggle')) {
-    setMetaEnabled(metaEnabled);
-    on('metaToggle','click', (e) => { e.preventDefault(); setMetaEnabled(!metaEnabled); updateMetaOverlay(); });
-  }
+  // metaToggle removed
 
   // delete actions
   on('toggleAll','click', (e) => {
@@ -955,11 +1076,13 @@
     const tok = getUploadToken();
     const headers = { 'Content-Type':'application/json' };
     if (tok) headers['x-upload-token'] = tok;
-    const r = await fetch('/api/delete?dir=' + encodeURIComponent(currentDir), {
+    const src = (window.__activeSource || 'local');
+    const url = (src === 'dav') ? ('/api/dav/delete?dir=' + encodeURIComponent(currentDir)) : ('/api/delete?dir=' + encodeURIComponent(currentDir));
+    const r = await apiFetch(url, {
       method:'POST',
       headers,
       body: JSON.stringify({ dir: currentDir, names })
-    });
+    }, { webdav: (src === 'dav') });
     const j = await r.json();
     // reload
     exitSelectMode();
@@ -976,11 +1099,15 @@
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
     const tok = getUploadToken();
-    await fetch('/api/upload?dir=' + encodeURIComponent(currentDir), {
+    const src = (window.__activeSource || 'local');
+    const url = (src === 'dav') ? ('/api/dav/upload?dir=' + encodeURIComponent(currentDir)) : ('/api/upload?dir=' + encodeURIComponent(currentDir));
+    const headers = {};
+    if (tok) headers['x-upload-token'] = tok;
+    await apiFetch(url, {
       method:'POST',
-      headers: tok ? { 'x-upload-token': tok } : undefined,
+      headers,
       body: fd
-    });
+    }, { webdav: (src === 'dav') });
     if ($('file')) $('file').value = '';
     await load(currentDir);
   });
@@ -999,6 +1126,21 @@
     else startAutoplay();
   });
 
+  async function apiFetch(url, opts = {}, extra = {}){
+    const headers = Object.assign({}, (opts.headers || {}));
+    const admin = getAdminPass();
+    if (admin) headers['x-admin-pass'] = admin;
+    if (extra.webdav) {
+      const dav = getWebdavCfg();
+      if (dav && dav.url) {
+        headers['x-webdav-url'] = dav.url;
+        headers['x-webdav-user'] = dav.user || '';
+        headers['x-webdav-pass'] = dav.pass || '';
+      }
+    }
+    return fetch(url, Object.assign({}, opts, { headers }));
+  }
+
   // initial load
   async function load(dir){
     // Tear down previous bubble simulation / observers to avoid leaks when switching dirs/modes.
@@ -1016,8 +1158,51 @@
     try {
       const seed = (viewMode === 'masonry') ? String(Date.now()) : '';
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
-      const r = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
-      data = await r.json();
+
+      const mode = getSourceMode();
+      const dav = getWebdavCfg();
+
+      // decide active source
+      let active = 'local';
+      if (mode === 'dav') active = 'dav';
+      else if (mode === 'local') active = 'local';
+      else active = 'auto';
+
+      // helper to fetch from a source
+      const fetchSrc = async (src) => {
+        const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
+        const r = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order, {}, { webdav: (src === 'dav') });
+        const j = await r.json();
+        j.__src = src;
+        return j;
+      };
+
+      if (active === 'auto') {
+        // try local first
+        const j1 = await fetchSrc('local');
+        if ((j1.total || 0) > 0) {
+          data = j1;
+        } else {
+          if (!dav.enabled || !dav.url) {
+            data = j1;
+          } else if (!getAdminPass()) {
+            data = j1;
+          } else {
+            const j2 = await fetchSrc('dav');
+            data = j2;
+          }
+        }
+      } else {
+        if (active === 'dav' && (!dav.enabled || !dav.url)) {
+          data = { error: 'WebDAV 未启用或未配置' };
+        } else if (active === 'dav' && !getAdminPass()) {
+          data = { error: '远程数据需要先在设置里解锁管理密码' };
+        } else {
+          data = await fetchSrc(active);
+        }
+      }
+
+      window.__activeSource = data.__src || (active === 'auto' ? 'local' : active);
     } catch (e) {
       console.error('load failed', e);
       $('content').innerHTML = '<div class="empty">加载失败（网络/脚本错误）。打开控制台看报错。</div>';
