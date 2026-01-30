@@ -150,7 +150,8 @@ body.immersive .lb-img{ transition: transform .12s ease, opacity .28s ease; }
 .thumb img{ width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
 .thumb.active{ border-color: rgba(110,168,254,.98); transform: translateY(-12px) scale(1.12); box-shadow: 0 26px 46px rgba(0,0,0,.60), 0 0 0 3px rgba(110,168,254,.26), 0 0 44px rgba(110,168,254,.32); filter: saturate(1.18) contrast(1.06); }
 
-.lbX,.lbPrev,.lbNext{ position:absolute; top:12px; background:rgba(0,0,0,.42); border:1px solid rgba(255,255,255,.22); color:#fff; border-radius:var(--r-sm); width:44px; height:44px; padding:0; cursor:pointer; font-size:24px; line-height:1; display:grid; place-items:center; }
+.lbX,.lbPrev,.lbNext{ position:absolute; top:12px; background:rgba(0,0,0,.42); border:1px solid rgba(255,255,255,.22); color:#fff; border-radius:var(--r-sm); width:44px; height:44px; padding:0; cursor:pointer; font-size:24px; line-height:1; display:grid; place-items:center; transition: opacity .25s ease; }
+#lb.ctlHide .lbX, #lb.ctlHide .lbPrev, #lb.ctlHide .lbNext{ opacity:0; pointer-events:none; }
 .lbX{ right:12px; }
 .lbPrev{ left:12px; top:50%; transform:translateY(-50%); }
 .lbNext{ right:12px; top:50%; transform:translateY(-50%); }

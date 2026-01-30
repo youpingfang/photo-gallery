@@ -413,11 +413,19 @@
 
     const lb = $('lb');
     lb.classList.add('open');
-    lb.classList.add('ctlHide');
 
     // blurred background to avoid black bars when using object-fit:contain
     const bg = $('lbBg');
     if (bg) bg.src = f.url;
+
+    // auto-hide controls a moment after opening
+    lb.classList.remove('ctlHide');
+    if (!window.__lbCtlTimer) window.__lbCtlTimer = 0;
+    try { if (window.__lbCtlTimer) clearTimeout(window.__lbCtlTimer); } catch {}
+    window.__lbCtlTimer = setTimeout(() => {
+      // don't hide if user is interacting
+      lb.classList.add('ctlHide');
+    }, 1800);
 
     const nextImg = getInactiveImg();
     if (nextImg) {
@@ -547,6 +555,23 @@
   on('lbPrev','click', (e) => { e.preventDefault(); e.stopPropagation(); prevLb(); });
   on('lbNext','click', (e) => { e.preventDefault(); e.stopPropagation(); nextLb(); });
   on('lb','click', (e) => { if (e.target === $('lb')) closeLb(); });
+
+  // show controls on interaction, then hide after a delay
+  let lbCtlTimer = 0;
+  function showLbControls(){
+    const lb = $('lb');
+    if (!lb || !lb.classList.contains('open')) return;
+    lb.classList.remove('ctlHide');
+    try { if (lbCtlTimer) clearTimeout(lbCtlTimer); } catch {}
+    lbCtlTimer = setTimeout(() => {
+      // keep controls while zoomed (user likely navigating/panning)
+      if (zoom > 1.02) return;
+      lb.classList.add('ctlHide');
+    }, 2000);
+  }
+  for (const ev of ['pointerdown','pointermove','touchstart','wheel','keydown']) {
+    lb.addEventListener(ev, showLbControls, { passive:true });
+  }
 
   // lightbox zoom (wheel + double click) and pan (drag when zoomed)
   const lb = $('lb');
