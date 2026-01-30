@@ -954,9 +954,9 @@
       const H = Math.max(420, Math.floor(rect.height));
 
       const wallOpts = { isStatic:true, restitution:0.85, friction:0.02 };
-      // Walls: keep sides/bottom, move top wall far above so new tiles can "rain" in from above.
+      // Walls: keep sides/bottom. Put top wall far above so "rain" can enter without getting stuck.
       Composite.add(engine.world, [
-        Bodies.rectangle(W/2, -220, W+260, 120, wallOpts),
+        Bodies.rectangle(W/2, -1200, W+260, 200, wallOpts),
         Bodies.rectangle(W/2, H+24, W+200, 48, wallOpts),
         Bodies.rectangle(-24, H/2, 48, H+200, wallOpts),
         Bodies.rectangle(W+24, H/2, 48, H+200, wallOpts),
@@ -1000,14 +1000,12 @@
         });
 
         // optional fade-in (used for "rain" new tiles)
-        if (opts.fadeIn) {
+        const fadeInPending = !!opts.fadeIn;
+        if (fadeInPending) {
           el.style.opacity = '0';
         }
 
         stage.appendChild(el);
-        if (opts.fadeIn) {
-          requestAnimationFrame(() => { el.style.opacity = '1'; });
-        }
 
         const x = (typeof opts.x === 'number') ? opts.x : (40 + (rr * (W - w - 80)) + w/2);
         const y = (typeof opts.y === 'number') ? opts.y : (20 + (i * 6));
@@ -1019,7 +1017,7 @@
         }
 
         currentNames.add(f.name);
-        bodies.push({ body, el, w, h: hpx, name: f.name });
+        bodies.push({ body, el, w, h: hpx, name: f.name, fadeInPending });
       }
 
       for (let i=0;i<files.length;i++) makeBubble(files[i], i);
@@ -1064,16 +1062,16 @@
 
             // add new as "rain": spawn above viewport and fall down
             const rx = 40 + (Math.random() * (W - 80));
-            const spawnY = -260 - Math.floor(Math.random() * 180);
+            const spawnY = -260 - Math.floor(Math.random() * 220);
             makeBubble(nf, 2 + Math.floor(Math.random() * Math.max(1, MAX-4)), {
               x: rx,
               y: spawnY,
               // gentle drift
               vx: (Math.random() - 0.5) * 0.8,
-              // start slow so it "floats" down instead of popping in
-              vy: 1.4 + Math.random() * 0.8,
-              // more air resistance for a softer fall
-              air: 0.06,
+              // fall speed: slow but clearly visible
+              vy: 3.0 + Math.random() * 1.2,
+              // air resistance for a softer fall (but not stuck)
+              air: 0.04,
               fadeIn: true
             });
           }
@@ -1086,6 +1084,11 @@
         for (const it of bodies){
           const b = it.body;
           it.el.style.transform = 'translate(' + (b.position.x - it.w/2) + 'px,' + (b.position.y - it.h/2) + 'px) rotate(' + b.angle + 'rad)';
+          // fade in only after the tile has actually entered the viewport area
+          if (it.fadeInPending && b.position.y > 40) {
+            it.fadeInPending = false;
+            it.el.style.opacity = '1';
+          }
         }
         rafId = requestAnimationFrame(raf);
       })();
