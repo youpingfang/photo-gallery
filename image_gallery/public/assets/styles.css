@@ -185,4 +185,7 @@ body.immersive #lbMeta{ display:block; }
 
 @media (max-width: 520px){
   input{ min-width:180px; width:100%; }
+  /* mobile: make tiles larger */
+  .grid{ column-gap: 6px; column-count: 2; }
+  .tile{ margin-bottom: 6px; }
 }
