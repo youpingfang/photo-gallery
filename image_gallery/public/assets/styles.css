@@ -135,7 +135,9 @@ body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); 
   0%,100%{ opacity:.55; transform: scale(0.98); }
   50%{ opacity:1; transform: scale(1.04); }
 }
-#modeQuick{ font-size:13px; letter-spacing:.2px; position:relative; overflow:visible; white-space:nowrap; width:auto; min-width:86px; padding:0 10px; }
+#modeQuick{ font-size:13px; letter-spacing:.2px; position:relative; overflow:visible; width:52px; height:52px; padding:0; line-height:1.05; }
+#modeQuick .mqTop{ font-weight:800; font-size:12px; }
+#modeQuick .mqBottom{ font-weight:700; font-size:12px; opacity:.9; margin-top:2px; }
 #modeQuick::before{
   content:'';
   position:absolute;
@@ -155,6 +157,7 @@ body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); 
   opacity:.9;
   pointer-events:none;
 }
+#modeQuick > *{ position:relative; z-index:1; }
 
 /* lightbox */
 .lb{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,.25); display:none; align-items:center; justify-content:center; padding:10px; overscroll-behavior:contain; touch-action:none; backdrop-filter: blur(10px); transform:translateZ(0); }
