@@ -590,6 +590,9 @@
 
       // bubbleCount only relevant for bubble
       if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
+
+      // close settings so the user can see the layout change immediately
+      closeSettings();
       await load(currentDir);
     });
   }
