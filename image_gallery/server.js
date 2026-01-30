@@ -286,10 +286,22 @@ app.use('/images', express.static(IMAGES_DIR, {
 
 // Serve SPA frontend from ./public
 // (index.html + assets/app.js + assets/styles.css)
-const BUILD_ID = process.env.BUILD_ID || 'dev';
+// Build id should change when frontend files change, otherwise reverse proxies may cache /assets too aggressively.
+function getBuildId(){
+  try {
+    const p1 = path.join(__dirname, 'public', 'assets', 'app.js');
+    const p2 = path.join(__dirname, 'public', 'assets', 'styles.css');
+    const s1 = fs.statSync(p1).mtimeMs;
+    const s2 = fs.statSync(p2).mtimeMs;
+    const stamp = 'b' + Math.floor(Math.max(s1, s2));
+    return (process.env.BUILD_ID ? (process.env.BUILD_ID + '-' + stamp) : stamp);
+  } catch {
+    return process.env.BUILD_ID || 'dev';
+  }
+}
 
 app.get('/api/config', (req, res) => {
-  res.json({ buildId: BUILD_ID, autoplayMs: 3000 });
+  res.json({ buildId: getBuildId(), autoplayMs: 3000 });
 });
 
 // Avoid stale frontend on mobile/desktop browsers & reverse proxies
@@ -311,7 +323,7 @@ app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), {
 app.get('/', (req, res) => {
   try {
     const p = path.join(__dirname, 'public', 'index.html');
-    const html = fs.readFileSync(p, 'utf8').replaceAll('__BUILD_ID__', BUILD_ID);
+    const html = fs.readFileSync(p, 'utf8').replaceAll('__BUILD_ID__', getBuildId());
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.send(html);
