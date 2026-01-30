@@ -197,17 +197,18 @@ body.immersive #lbMeta{ display:block; }
 .collage .cTile .cImg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition: opacity .65s ease; background:transparent; }
 .collage .cTile .cImg.on{ opacity:1; }
 
-/* layout similar to screenshot */
-.collage .c1{ grid-column: 1 / span 2; grid-row: 1 / span 1; aspect-ratio: 16/9; }
-.collage .c2{ grid-column: 3 / span 1; grid-row: 1 / span 1; aspect-ratio: 1/1; }
-.collage .c3{ grid-column: 1 / span 1; grid-row: 2 / span 2; aspect-ratio: 3/4; }
-.collage .c4{ grid-column: 2 / span 1; grid-row: 2 / span 3; aspect-ratio: 3/5; }
-.collage .c5{ grid-column: 3 / span 1; grid-row: 2 / span 2; aspect-ratio: 3/5; }
-.collage .c6{ grid-column: 3 / span 1; grid-row: 4 / span 1; aspect-ratio: 3/4; }
-.collage .c7{ grid-column: 1 / span 1; grid-row: 4 / span 1; aspect-ratio: 1/1; }
-.collage .c8{ grid-column: 2 / span 1; grid-row: 5 / span 1; aspect-ratio: 1/1; }
-.collage .c9{ grid-column: 1 / span 1; grid-row: 5 / span 1; aspect-ratio: 4/3; }
-.collage .c10{ grid-column: 3 / span 1; grid-row: 5 / span 1; aspect-ratio: 4/3; }
+/* collage template uses grid areas (mobile + desktop define grid-template-areas) */
+.collage{ grid-auto-flow: dense; }
+.collage .c1{ grid-area:c1; }
+.collage .c2{ grid-area:c2; }
+.collage .c3{ grid-area:c3; }
+.collage .c4{ grid-area:c4; }
+.collage .c5{ grid-area:c5; }
+.collage .c6{ grid-area:c6; }
+.collage .c7{ grid-area:c7; }
+.collage .c8{ grid-area:c8; }
+.collage .c9{ grid-area:c9; }
+.collage .c10{ grid-area:c10; }
 
 @media (min-width: 900px){
   .bubbleStage{ height: 100vh; border-radius:0; border:0; box-shadow:none; background:transparent; }
@@ -231,17 +232,7 @@ body.immersive #lbMeta{ display:block; }
       "c6 c7 c8 c9 c10";
   }
 
-  /* area mapping (let grid decide size; no aspect-ratio on desktop to avoid big gaps) */
-  .collage .c1{ grid-area:c1; }
-  .collage .c2{ grid-area:c2; }
-  .collage .c3{ grid-area:c3; }
-  .collage .c4{ grid-area:c4; }
-  .collage .c5{ grid-area:c5; }
-  .collage .c6{ grid-area:c6; }
-  .collage .c7{ grid-area:c7; }
-  .collage .c8{ grid-area:c8; }
-  .collage .c9{ grid-area:c9; }
-  .collage .c10{ grid-area:c10; }
+  /* area mapping moved to global */
 }
 
 @media (max-width: 520px){
