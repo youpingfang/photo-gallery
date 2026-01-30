@@ -321,6 +321,79 @@ app.get('/api/images', async (req, res) => {
   }
 });
 
+// --- likes (simple counters; optional, best-effort) ---
+const LIKES_FILE = process.env.LIKES_FILE || path.join(IMAGES_DIR, '.likes.json');
+let likesCache = null;
+let likesCacheMtime = 0;
+function readLikesFile(){
+  try {
+    if (!fs.existsSync(LIKES_FILE)) return {};
+    const st = fs.statSync(LIKES_FILE);
+    if (likesCache && likesCacheMtime === st.mtimeMs) return likesCache;
+    const raw = fs.readFileSync(LIKES_FILE, 'utf8');
+    const j = JSON.parse(raw || '{}');
+    likesCache = (j && typeof j === 'object') ? j : {};
+    likesCacheMtime = st.mtimeMs;
+    return likesCache;
+  } catch {
+    return {};
+  }
+}
+function writeLikesFile(obj){
+  try {
+    const dir = path.dirname(LIKES_FILE);
+    fs.mkdirSync(dir, { recursive:true });
+    const tmp = LIKES_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(obj));
+    fs.renameSync(tmp, LIKES_FILE);
+    try {
+      const st = fs.statSync(LIKES_FILE);
+      likesCache = obj;
+      likesCacheMtime = st.mtimeMs;
+    } catch {}
+    return true;
+  } catch {
+    return false;
+  }
+}
+function likeId(subdir, name){
+  const d = (subdir || '').toString().replace(/^\/+/, '').replace(/\/+$/, '');
+  return d ? (d + '/' + name) : name;
+}
+
+app.get('/api/likes', (req, res) => {
+  const subdir = (req.query.dir || '').toString();
+  const namesRaw = (req.query.names || '').toString();
+  const names = namesRaw ? namesRaw.split(',').map(s => decodeURIComponent(s)).filter(Boolean) : [];
+  const store = readLikesFile();
+  const out = {};
+  for (const n of names) {
+    const key = likeId(subdir, n);
+    const v = store[key];
+    out[n] = (typeof v === 'number' && isFinite(v)) ? v : 0;
+  }
+  res.json({ ok:true, likes: out });
+});
+
+app.post('/api/like', express.json({ limit: '16kb' }), (req, res) => {
+  const subdir = (req.body?.dir || '').toString();
+  const name = (req.body?.name || '').toString();
+  if (!name) return res.status(400).json({ error: 'bad name' });
+
+  // Ensure the file exists
+  const absDir = safeJoin(IMAGES_DIR, subdir);
+  if (!absDir) return res.status(400).json({ error: 'bad dir' });
+  const imageAbs = safeJoin(absDir, name);
+  if (!imageAbs || !fs.existsSync(imageAbs)) return res.status(404).json({ error: 'not found' });
+
+  const id = likeId(subdir, name);
+  const store = readLikesFile();
+  const cur = (typeof store[id] === 'number' && isFinite(store[id])) ? store[id] : 0;
+  store[id] = cur + 1;
+  writeLikesFile(store);
+  res.json({ ok:true, name, count: store[id] });
+});
+
 app.get('/api/meta', async (req, res) => {
   const subdir = (req.query.dir || '').toString();
   const name = (req.query.name || '').toString();

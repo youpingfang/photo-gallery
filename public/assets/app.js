@@ -84,6 +84,36 @@
   let selectMode = false;
   const selected = new Set();
 
+  // likes
+  const likes = new Map(); // name -> count (currentDir scoped)
+  function likeKey(name){ return (currentDir || '') + '|' + String(name || ''); }
+  function isLiked(name){
+    try { return localStorage.getItem('liked:' + likeKey(name)) === '1'; } catch { return false; }
+  }
+  function markLiked(name){
+    try { localStorage.setItem('liked:' + likeKey(name), '1'); } catch {}
+  }
+  function setLikeUI(el, name){
+    if (!el) return;
+    const btn = el.querySelector('.likeBtn');
+    if (!btn) return;
+    const n = likes.get(String(name)) || 0;
+    const c = btn.querySelector('.count');
+    if (c) c.textContent = String(n);
+    btn.classList.toggle('liked', isLiked(name));
+  }
+  async function fetchLikesFor(names){
+    try {
+      const q = names.map(encodeURIComponent).join(',');
+      const r = await fetch('/api/likes?dir=' + encodeURIComponent(currentDir || '') + '&names=' + q);
+      const j = await r.json();
+      if (!j || !j.ok || !j.likes) return;
+      for (const [k,v] of Object.entries(j.likes)) {
+        likes.set(k, v || 0);
+      }
+    } catch {}
+  }
+
   // lightbox images (crossfade)
   function getActiveImg(){
     return document.querySelector('.lb-img.isActive') || $('lbImgA') || $('lbImgB');
@@ -250,12 +280,38 @@
 
     const thumb = f.thumbUrl || f.url;
     tile.innerHTML = '<div class="check">✓</div>' +
-      '<img loading="lazy" src="' + esc(thumb) + '" alt="" />';
+      '<img loading="lazy" src="' + esc(thumb) + '" alt="" />' +
+      '<div class="likeBtn" role="button" aria-label="点赞"><span class="heart">❤</span><span class="count">0</span></div>';
+
+    const likeBtn = tile.querySelector('.likeBtn');
+    if (likeBtn) {
+      likeBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isLiked(f.name)) return;
+        try {
+          const r = await fetch('/api/like', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ dir: currentDir || '', name: f.name })
+          });
+          const j = await r.json();
+          if (j && j.ok && typeof j.count === 'number') {
+            likes.set(String(f.name), j.count);
+            markLiked(f.name);
+            setLikeUI(tile, f.name);
+          }
+        } catch {}
+      });
+    }
 
     tile.addEventListener('click', (e) => {
       if (selectMode) { e.preventDefault(); toggleSelect(f.name, tile); return; }
       openLb(globalIndex);
     });
+
+    // initial count / state
+    setLikeUI(tile, f.name);
 
     // long-press on mobile enters select
     let lp = null;
@@ -294,9 +350,13 @@
       const s = document.getElementById('sentinel');
       if (s) s.remove();
 
+      const newFiles = (d2.files || []);
+      // fetch likes for newly appended items
+      await fetchLikesFor(newFiles.map(f => f.name));
+
       const totalCount = d2.total || currentFiles.length;
-      for (let i=0;i<(d2.files||[]).length;i++){
-        gridEl.appendChild(makeTile(startIndex + i, d2.files[i], totalCount));
+      for (let i=0;i<newFiles.length;i++){
+        gridEl.appendChild(makeTile(startIndex + i, newFiles[i], totalCount));
       }
       mountSentinel();
     } finally {
@@ -946,6 +1006,10 @@
 
     currentFiles = data.files || [];
     currentIndex = -1;
+
+    // load likes for current page (dir-scoped)
+    likes.clear();
+    await fetchLikesFor(currentFiles.map(f => f.name));
     nextOffset = data.nextOffset || currentFiles.length;
     hasMore = !!data.hasMore;
 
@@ -1027,6 +1091,31 @@
         img.src = f.thumbUrl || f.url;
         img.alt = f.name;
         el.appendChild(img);
+
+        // like overlay
+        const likeWrap = document.createElement('div');
+        likeWrap.className = 'likeBtn';
+        likeWrap.innerHTML = '<span class="heart">❤</span><span class="count">0</span>';
+        likeWrap.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isLiked(f.name)) return;
+          try {
+            const r = await fetch('/api/like', {
+              method:'POST',
+              headers:{ 'Content-Type':'application/json' },
+              body: JSON.stringify({ dir: currentDir || '', name: f.name })
+            });
+            const j = await r.json();
+            if (j && j.ok && typeof j.count === 'number') {
+              likes.set(String(f.name), j.count);
+              markLiked(f.name);
+              setLikeUI(el, f.name);
+            }
+          } catch {}
+        });
+        el.appendChild(likeWrap);
+        setLikeUI(el, f.name);
 
         el.addEventListener('click', () => {
           const idx = currentFiles.findIndex(x => x.name === f.name);
@@ -1234,9 +1323,37 @@
           if (r < 0.22) t.classList.add('circle');
         }
         // double-buffered images for smooth crossfade
-        t.innerHTML = '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />';
+        t.innerHTML = '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />' +
+          '<div class="likeBtn" role="button" aria-label="点赞"><span class="heart">❤</span><span class="count">0</span></div>';
         const f = pickNext('');
         setTileImg(t, f);
+
+        const lb = t.querySelector('.likeBtn');
+        if (lb) {
+          lb.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const name = t.getAttribute('data-name') || '';
+            if (!name || isLiked(name)) return;
+            try {
+              const r = await fetch('/api/like', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ dir: currentDir || '', name })
+              });
+              const j = await r.json();
+              if (j && j.ok && typeof j.count === 'number') {
+                likes.set(String(name), j.count);
+                markLiked(name);
+                setLikeUI(t, name);
+              }
+            } catch {}
+          });
+        }
+        // initial
+        const n0 = t.getAttribute('data-name') || '';
+        if (n0) setLikeUI(t, n0);
+
         t.addEventListener('click', () => {
           const name = t.getAttribute('data-name') || '';
           const idx = currentFiles.findIndex(x => x.name === name);
