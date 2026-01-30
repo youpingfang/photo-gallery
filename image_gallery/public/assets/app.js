@@ -415,6 +415,10 @@
     lb.classList.add('open');
     lb.classList.add('ctlHide');
 
+    // blurred background to avoid black bars when using object-fit:contain
+    const bg = $('lbBg');
+    if (bg) bg.src = f.url;
+
     const nextImg = getInactiveImg();
     if (nextImg) {
       nextImg.style.transform = 'translate3d(0px,0px,0) scale(1)';
