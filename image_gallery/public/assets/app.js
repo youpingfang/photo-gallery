@@ -62,6 +62,14 @@
     else if (v === '1') bubbleMode = true;
   } catch {}
 
+  // bubble count (user adjustable)
+  const defaultBubbleCount = () => (isMobileLike() ? 20 : 25);
+  let bubbleCount = defaultBubbleCount();
+  try {
+    const bc = parseInt(localStorage.getItem('gallery_bubble_count') || '', 10);
+    if (!isNaN(bc)) bubbleCount = bc;
+  } catch {}
+
   let metaEnabled = false;
   try { metaEnabled = (localStorage.getItem('gallery_meta') === '1'); } catch {}
 
@@ -88,6 +96,12 @@
   // --- UI helpers ---
   function isMobileLike(){
     return (window.matchMedia && window.matchMedia('(max-width: 520px)').matches) || (window.innerWidth && window.innerWidth <= 520);
+  }
+
+  function clampInt(n, lo, hi){
+    n = parseInt(String(n || ''), 10);
+    if (isNaN(n)) return null;
+    return Math.max(lo, Math.min(hi, n));
   }
 
   function setCrumbs(dir){
@@ -158,7 +172,7 @@
   function setBubbleMode(on){
     bubbleMode = !!on;
     try { localStorage.setItem('gallery_bubble', bubbleMode ? '1' : '0'); } catch {}
-    if ($('bubbleModeBtn')) $('bubbleModeBtn').textContent = '泡泡布局：' + (bubbleMode ? '开' : '关') + (isMobileLike() ? '（手机限15张）' : '');
+    if ($('bubbleModeBtn')) $('bubbleModeBtn').textContent = '泡泡布局：' + (bubbleMode ? '开' : '关');
   }
 
   function setMetaEnabled(on){
@@ -566,13 +580,22 @@
       e.preventDefault();
       const next = !bubbleMode;
       setBubbleMode(next);
-
-      // If Matter failed to load (CDN blocked), bubble mode will look like it does nothing.
-      if (next && !window.Matter) {
-        alert('泡泡模式引擎未加载（可能是外网 CDN 被拦）。我已改成走本地 /assets/vendor/matter.min.js，请强制刷新后再试。');
-      }
-
       await load(currentDir);
+    });
+  }
+
+  // bubble count input
+  if ($('bubbleCount')) {
+    // init default per device
+    const def = (isMobileLike() ? 20 : 25);
+    const v = clampInt(bubbleCount, 5, 80) || def;
+    $('bubbleCount').value = String(v);
+
+    $('bubbleCount').addEventListener('change', async () => {
+      const n = clampInt($('bubbleCount').value, 5, 80) || def;
+      bubbleCount = n;
+      try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
+      if (bubbleMode) await load(currentDir);
     });
   }
   if ($('metaToggle')) {
@@ -678,7 +701,7 @@
 
     // bubble mode (restored)
     if (bubbleMode && window.Matter) {
-      const MAX = isMobileLike() ? 15 : 20;
+      const MAX = clampInt(bubbleCount, 5, 80) || (isMobileLike() ? 20 : 25);
       const files = currentFiles.slice(0, MAX);
 
       const stage = document.createElement('div');
