@@ -564,7 +564,26 @@
     try { localStorage.setItem('gallery_cols', String(n)); } catch {}
     if ($('cols')) $('cols').value = String(n);
   }
-  on('apply','click', () => { applyCols($('cols') ? $('cols').value : 'auto'); closeSettings(); });
+  on('apply','click', async () => {
+    // Apply all settings at once
+    applyCols($('cols') ? $('cols').value : 'auto');
+
+    if ($('viewMode')) {
+      const v = ($('viewMode').value || 'bubble');
+      viewMode = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
+      try { localStorage.setItem('gallery_view_mode', viewMode); } catch {}
+    }
+
+    if ($('bubbleCount')) {
+      const def = (isMobileLike() ? 20 : 25);
+      const n = clampInt($('bubbleCount').value, 5, 80) || def;
+      bubbleCount = n;
+      try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
+    }
+
+    closeSettings();
+    await load(currentDir);
+  });
 
   // init cols
   let savedCols = null;
@@ -583,17 +602,11 @@
   // mode selector
   if ($('viewMode')) {
     try { $('viewMode').value = viewMode; } catch {}
-    $('viewMode').addEventListener('change', async () => {
+    $('viewMode').addEventListener('change', () => {
       const v = ($('viewMode').value || 'bubble');
-      viewMode = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
-      try { localStorage.setItem('gallery_view_mode', viewMode); } catch {}
-
-      // bubbleCount only relevant for bubble
-      if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
-
-      // close settings so the user can see the layout change immediately
-      closeSettings();
-      await load(currentDir);
+      const vm = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
+      // preview-only: just update dependent UI; apply happens on "保存并应用"
+      if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (vm === 'bubble') ? 'flex' : 'none';
     });
   }
 
@@ -604,11 +617,8 @@
     $('bubbleCount').value = String(v);
     if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
 
-    $('bubbleCount').addEventListener('change', async () => {
-      const n = clampInt($('bubbleCount').value, 5, 80) || def;
-      bubbleCount = n;
-      try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
-      if (viewMode === 'bubble') await load(currentDir);
+    $('bubbleCount').addEventListener('change', () => {
+      // preview-only; apply happens on "保存并应用"
     });
   }
   if ($('metaToggle')) {
