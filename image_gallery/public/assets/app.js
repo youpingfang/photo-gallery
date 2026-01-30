@@ -907,9 +907,38 @@
         tile.setAttribute('data-name', file.name);
         activeNames.add(file.name);
 
+        // Avoid "blank tile" if onload doesn't fire (cached/blocked) by:
+        // 1) setting a timeout to force-show
+        // 2) falling back from thumbUrl -> url on error
         img.classList.remove('on');
-        img.onload = () => { img.classList.add('on'); };
-        img.src = file.thumbUrl || file.url;
+        let forced = false;
+        const forceShow = () => {
+          if (forced) return;
+          forced = true;
+          img.classList.add('on');
+        };
+        const forceTimer = setTimeout(forceShow, 300);
+
+        const primary = file.thumbUrl || file.url;
+        const fallback = file.url;
+
+        img.onload = () => {
+          clearTimeout(forceTimer);
+          // next frame so transition is reliable
+          requestAnimationFrame(forceShow);
+        };
+        img.onerror = () => {
+          clearTimeout(forceTimer);
+          // if thumb failed, try original image once
+          if (img.src && img.src.includes('/api/thumb') && fallback) {
+            img.src = fallback;
+            setTimeout(forceShow, 200);
+          } else {
+            forceShow();
+          }
+        };
+
+        img.src = primary;
       }
 
       const tiles = [];
