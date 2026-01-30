@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Gallery</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="/assets/vendor/matter.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <div>
+        <div class="title">Gallery</div>
+        <div class="crumbs" id="crumbs"></div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <div id="dirs" class="dirs"></div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div id="content"></div>
+  </div>
+
+  <!-- floating buttons -->
+  <div class="fab" id="fab">
+    <button id="settingsBtn" title="配置" aria-label="配置">⚙️</button>
+    <button id="uploadBtn" title="上传" aria-label="上传">＋</button>
+    <button id="playPref" title="自动播放" aria-label="自动播放">▶</button>
+  </div>
+
+  <!-- selection action bar -->
+  <div class="actionBar" id="actionBar">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div id="selCount" style="font-weight:800;">已选择 0</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button id="toggleAll" class="btnGhost">全选</button>
+      <button id="cancelSel" class="btnGhost">取消</button>
+      <button id="deleteSel" class="btnDanger">删除</button>
+    </div>
+  </div>
+
+  <!-- lightbox -->
+  <div class="lb" id="lb">
+    <div class="lb-inner">
+      <div class="lb-stage">
+        <div class="mainWrap">
+          <img class="lb-img isActive" id="lbImgA" />
+          <img class="lb-img" id="lbImgB" />
+          <button id="lbX" aria-label="关闭" class="lbX">✕</button>
+          <button id="lbPrev" aria-label="上一张" class="lbPrev">‹</button>
+          <button id="lbNext" aria-label="下一张" class="lbNext">›</button>
+          <div id="hintSwipe" class="hint" style="left:50%;top:14px;transform:translate(-50%,6px);">左右滑动切换 · 双击/双指放大</div>
+          <div id="hintThumbs" class="hint" style="left:50%;bottom:78px;transform:translate(-50%,6px);">底部滑动选图</div>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+      <div id="apProg" aria-hidden="true"><div id="apProgBar"></div></div>
+      <div id="lbMeta" style="display:none"></div>
+      <a id="lbOpen" target="_blank" rel="noreferrer" style="display:none;">open</a>
+      <div id="lbName" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- settings modal -->
+  <div class="lb" id="settings" style="background:rgba(0,0,0,.55)">
+    <div class="lb-inner" style="max-width:520px; height:auto;">
+      <div class="settingsCard">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="font-weight:800;">显示配置</div>
+          <a href="#" id="settingsClose" style="color:var(--accent);text-decoration:none;">关闭</a>
+        </div>
+        <div style="margin-top:12px;color:var(--muted);font-size:13px;">本地图片展示（Gallery）</div>
+        <div style="margin-top:6px;color:var(--muted);font-size:13px;">手机建议 2~3 列，空洞会更少。</div>
+        <div style="margin-top:10px;color:rgba(255,255,255,.45);font-size:12px;">Build: <span id="buildId">…</span></div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <span style="min-width:60px;color:var(--muted);">目录</span>
+            <input id="dir" placeholder="子目录（例如: 2026/01）" style="min-width:180px;" />
+          </label>
+          <button id="go" class="btnGhost">打开</button>
+        </div>
+
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
+          <label style="display:flex;gap:8px;align-items:center;">
+            <span style="min-width:60px;color:var(--muted);">列数</span>
+            <select id="cols" class="sel">
+              <option value="auto">自动（按屏幕宽度平铺）</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <button id="apply" class="btnPrimary">应用</button>
+          <button id="uploadInSettings" class="btnGhost">上传</button>
+          <button id="bubbleModeBtn" class="btnGhost">泡泡布局：关</button>
+          <button id="metaToggle" class="btnGhost">信息：关</button>
+          <button id="enterDelete" class="btnDanger">删除模式</button>
+        </div>
+        <div style="margin-top:10px;color:var(--muted);font-size:12px;">提示：删除模式下点击图片可选中，支持全选/删除；完成后点“退出删除模式”。</div>
+      </div>
+    </div>
+  </div>
+
+  <input id="file" type="file" accept="image/*" multiple style="display:none" />
+
+  <script src="/assets/app.js"></script>
+</body>
+</html>
