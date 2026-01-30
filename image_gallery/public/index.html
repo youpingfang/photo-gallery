@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Image Gallery</title>
+  <title></title>
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
@@ -12,21 +12,12 @@
   <script src="/assets/vendor/matter.min.js"></script>
 </head>
 <body>
-  <header>
-    <div class="row">
-      <div>
-        <div class="title">Gallery</div>
-        <div class="crumbs" id="crumbs"></div>
-      </div>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <div id="dirs" class="dirs"></div>
-      </div>
-    </div>
-  </header>
-
   <div class="wrap">
     <div id="content"></div>
   </div>
+
+  <div id="crumbs" style="display:none"></div>
+  <div id="dirs" style="display:none"></div>
 
   <!-- floating buttons -->
   <div class="fab" id="fab">
