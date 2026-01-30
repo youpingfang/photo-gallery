@@ -601,14 +601,21 @@
   });
 
   // mode selector
+  function syncModeUI(vm){
+    const mode = (vm === 'bubble' || vm === 'masonry' || vm === 'collage') ? vm : 'bubble';
+    if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (mode === 'bubble') ? 'flex' : 'none';
+    if ($('collageHint')) $('collageHint').style.display = (mode === 'collage') ? 'flex' : 'none';
+    if ($('colsWrap')) $('colsWrap').style.display = (mode === 'masonry') ? 'flex' : 'none';
+  }
+
   if ($('viewMode')) {
     try { $('viewMode').value = viewMode; } catch {}
+    syncModeUI(viewMode);
     $('viewMode').addEventListener('change', () => {
       const v = ($('viewMode').value || 'bubble');
       const vm = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
       // preview-only: update dependent UI; apply happens on "保存并应用"
-      if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (vm === 'bubble') ? 'flex' : 'none';
-      if ($('collageHint')) $('collageHint').style.display = (vm === 'collage') ? 'flex' : 'none';
+      syncModeUI(vm);
     });
   }
 
