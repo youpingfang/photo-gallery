@@ -1064,6 +1064,13 @@
       for (let i=0; i<classes.length; i++) {
         const t = document.createElement('div');
         t.className = 'cTile ' + classes[i];
+        // add a little shape variety (subtle)
+        // circles look best on smaller tiles
+        const isSmall = ['c2','c7','c8','c9','c10'].includes(classes[i]);
+        if (isSmall) {
+          const r = Math.random();
+          if (r < 0.22) t.classList.add('circle');
+        }
         // double-buffered images for smooth crossfade
         t.innerHTML = '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />';
         const f = pickNext('');

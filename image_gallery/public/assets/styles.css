@@ -190,6 +190,8 @@ body.immersive #lbMeta{ display:block; }
 /* collage mode */
 .collage{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; padding:10px; }
 .collage .cTile{ position:relative; overflow:hidden; border-radius:var(--r-md); background: rgba(255,255,255,.06); }
+.collage .cTile.circle{ border-radius:999px; }
+.collage .cTile.circle .cImg{ border-radius:999px; }
 .collage .cTile .cImg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition: opacity .65s ease; background:transparent; }
 .collage .cTile .cImg.on{ opacity:1; }
 
