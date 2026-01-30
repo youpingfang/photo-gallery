@@ -280,7 +280,9 @@
     if (!hasMore || isLoadingMore) return;
     isLoadingMore = true;
     try {
-      const r2 = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE);
+      const seed = (viewMode === 'masonry') ? (window.__masonrySeed || (window.__masonrySeed = String(Date.now()))) : '';
+      const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
+      const r2 = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       const d2 = await r2.json();
       if (d2.error) throw new Error(d2.error);
 
@@ -928,7 +930,9 @@
 
     let data;
     try {
-      const r = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE);
+      const seed = (viewMode === 'masonry') ? String(Date.now()) : '';
+      const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
+      const r = await fetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
       data = await r.json();
     } catch (e) {
       console.error('load failed', e);

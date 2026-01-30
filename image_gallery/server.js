@@ -74,6 +74,26 @@ async function invalidateImagesCache(subdir){
   try { await redis.del(Array.from(keys)); } catch {}
 }
 
+function hashToInt(str){
+  let h = 2166136261;
+  for (let i=0; i<str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+function seededShuffle(arr, seedStr){
+  const out = arr.slice();
+  let s = hashToInt(seedStr || '0');
+  // Fisher-Yates
+  for (let i=out.length-1; i>0; i--) {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    const t = out[i]; out[i] = out[j]; out[j] = t;
+  }
+  return out;
+}
+
 // 测试模式：不设置 token 时允许删除（不安全）。生产环境强烈建议设置 UPLOAD_TOKEN。
 
 const THUMBS_SUBDIR = '.thumbs';
@@ -250,6 +270,9 @@ app.get('/api/images', async (req, res) => {
   const limitRaw = parseInt((req.query.limit ?? '120').toString(), 10) || 120;
   const limit = Math.max(1, Math.min(500, limitRaw));
 
+  const order = (req.query.order || '').toString();
+  const seed = (req.query.seed || '').toString();
+
   try {
     // Try Redis cached listing first (metadata only)
     let cached = await cacheGetJson(cacheKeyImages(subdir));
@@ -282,8 +305,11 @@ app.get('/api/images', async (req, res) => {
     }
 
     const total = cached.total || (cached.allFiles ? cached.allFiles.length : 0);
-    const allFiles = cached.allFiles || [];
+    const baseAll = cached.allFiles || [];
     const dirs = cached.dirs || [];
+
+    // random order (stable per request seed)
+    const allFiles = (order === 'random') ? seededShuffle(baseAll, seed || String(Date.now())) : baseAll;
 
     const files = allFiles.slice(offset, offset + limit);
     const nextOffset = Math.min(total, offset + files.length);
