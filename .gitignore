@@ -1,0 +1,21 @@
+# local / generated
+node_modules/
+*.tar.gz
+*.tgz
+*.log
+
+# image gallery
+image_gallery/images/
+image_gallery/**/.thumbs/
+image_gallery/node_modules/
+image_gallery/node-standalone.log
+image_gallery/node-standalone.pid
+image_gallery_code.tar.gz
+zz-image-gallery_*.tar.gz
+
+# backups
+image_gallery_split_backup_*/
+_rollback/
+
+# misc
+.DS_Store

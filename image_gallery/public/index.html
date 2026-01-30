@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title></title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <meta name="theme-color" content="#0b0f1a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+  <link rel="stylesheet" href="/assets/styles.css?b=__BUILD_ID__" />
+  <script src="/assets/vendor/matter.min.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <div id="content"></div>
+  </div>
+
+  <!-- hidden legacy hooks (keep JS stable; no visual chrome) -->
+  <input id="dir" value="" style="display:none" />
+  <button id="go" style="display:none">go</button>
+  <div id="crumbs" style="display:none"></div>
+  <div id="dirs" style="display:none"></div>
+
+  <!-- floating buttons -->
+  <div class="fab" id="fab">
+    <button id="modeQuick" title="切换模式" aria-label="切换模式">模式</button>
+    <button id="settingsBtn" title="配置" aria-label="配置">⚙️</button>
+    <button id="uploadBtn" title="上传" aria-label="上传">＋</button>
+    <button id="playPref" title="自动播放" aria-label="自动播放">▶</button>
+  </div>
+
+  <!-- selection action bar -->
+  <div class="actionBar" id="actionBar">
+    <div style="display:flex;gap:10px;align-items:center;">
+      <div id="selCount" style="font-weight:800;">已选择 0</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button id="toggleAll" class="btnGhost">全选</button>
+      <button id="cancelSel" class="btnGhost">取消</button>
+      <button id="deleteSel" class="btnDanger">删除</button>
+    </div>
+  </div>
+
+  <!-- lightbox -->
+  <div class="lb" id="lb">
+    <div class="lb-inner">
+      <div class="lb-stage">
+        <div class="mainWrap" id="lbStage">
+          <div class="swipeGuard left" aria-hidden="true"></div>
+          <div class="swipeGuard right" aria-hidden="true"></div>
+          <img class="lb-bg" id="lbBg" alt="" />
+          <img class="lb-img isActive" id="lbImgA" />
+          <img class="lb-img" id="lbImgB" />
+          <button id="lbX" aria-label="关闭" class="lbX">✕</button>
+          <button id="lbPrev" aria-label="上一张" class="lbPrev">‹</button>
+          <button id="lbNext" aria-label="下一张" class="lbNext">›</button>
+          <div id="hintSwipe" class="hint" style="left:50%;top:14px;transform:translate(-50%,6px);">左右滑动切换 · 双击/双指放大</div>
+          <div id="hintThumbs" class="hint" style="left:50%;bottom:78px;transform:translate(-50%,6px);">底部滑动选图</div>
+        </div>
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+      <div id="apProg" aria-hidden="true"><div id="apProgBar"></div></div>
+      <div id="lbMeta" style="display:none"></div>
+      <a id="lbOpen" target="_blank" rel="noreferrer" style="display:none;">open</a>
+      <div id="lbName" style="display:none"></div>
+    </div>
+  </div>
+
+  <!-- settings modal -->
+  <div class="lb" id="settings" style="background:rgba(0,0,0,.55)">
+    <div class="lb-inner" style="max-width:520px; height:auto;">
+      <div class="settingsCard">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+          <div style="font-weight:900;">设置</div>
+          <a href="#" id="settingsClose" style="color:var(--accent);text-decoration:none;">关闭</a>
+        </div>
+        <div style="margin-top:10px;color:rgba(255,255,255,.45);font-size:12px;">Build: <span id="buildId">…</span></div>
+
+        <div class="setSection">
+          <div class="setTitle">视图</div>
+
+          <div class="setRow">
+            <div class="setLabel">模式</div>
+            <select id="viewMode" class="sel" style="width:180px;">
+              <option value="bubble">泡泡</option>
+              <option value="collage">拼贴</option>
+              <option value="masonry">瀑布流</option>
+            </select>
+          </div>
+
+          <div class="setRow" id="bubbleCountWrap">
+            <div class="setLabel">泡泡数量</div>
+            <input id="bubbleCount" type="number" min="5" max="80" step="1" value="25" style="width:120px;min-width:120px;" />
+          </div>
+
+          <div class="setRow" id="collageHint" style="display:none;">
+            <div class="setLabel">拼贴</div>
+            <div class="setHelp">10格随机轮播，每格每 5 秒自动换图。</div>
+          </div>
+
+          <div class="setRow" id="colsWrap">
+            <div class="setLabel">列数</div>
+            <select id="cols" class="sel" style="width:180px;">
+              <option value="auto">自动</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="setSection">
+          <div class="setTitle">信息</div>
+          <div class="setRow">
+            <div class="setLabel">拍摄信息</div>
+            <button id="metaToggle" class="btnGhost">信息：关</button>
+          </div>
+        </div>
+
+        <div class="setSection">
+          <div class="setTitle">管理</div>
+          <div class="setRow">
+            <div class="setLabel">上传</div>
+            <button id="uploadInSettings" class="btnGhost">上传</button>
+          </div>
+          <div class="setRow">
+            <div class="setLabel">删除</div>
+            <button id="enterDelete" class="btnDanger">删除模式</button>
+          </div>
+        </div>
+
+        <div class="setFooter">
+          <button id="cancelSettings" class="btnGhost">取消</button>
+          <button id="apply" class="btnPrimary">保存并应用</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <input id="file" type="file" accept="image/*" multiple style="display:none" />
+
+  <script src="/assets/app.js?b=__BUILD_ID__"></script>
+  <script>
+    // Register service worker for installability (no aggressive caching)
+    (function(){
+      if (!('serviceWorker' in navigator)) return;
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('/sw.js').catch(function(){});
+      });
+    })();
+  </script>
+</body>
+</html>

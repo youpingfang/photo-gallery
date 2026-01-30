@@ -1,0 +1,15 @@
+services:
+  gallery:
+    build: .
+    container_name: image-gallery
+    ports:
+      - "${PORT:-8088}:3000"
+    environment:
+      - PORT=3000
+      - IMAGES_DIR=/images
+      # 上传口令（建议设置一个复杂点的）
+      - UPLOAD_TOKEN=${UPLOAD_TOKEN:-}
+    volumes:
+      # 把宿主机图片目录挂载到容器 /images（需要写入所以不能 ro）
+      - "${IMAGE_DIR_HOST:-./images}:/images"
+    restart: unless-stopped
