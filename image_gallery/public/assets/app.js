@@ -825,6 +825,13 @@
       }
     }
 
+    // reflect mode on body for layout CSS
+    try {
+      document.body.classList.toggle('modeCollage', viewMode === 'collage');
+      document.body.classList.toggle('modeBubble', viewMode === 'bubble');
+      document.body.classList.toggle('modeMasonry', viewMode === 'masonry');
+    } catch {}
+
     // bubble mode
     if (viewMode === 'bubble' && window.Matter) {
       const MAX = clampInt(bubbleCount, 5, 80) || (isMobileLike() ? 20 : 25);
