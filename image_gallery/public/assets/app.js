@@ -1071,7 +1071,17 @@
           if (!bodies.length || !pool.length) return;
           const swapCount = isMobileLike() ? 3 : 5;
           for (let s=0; s<swapCount; s++) {
-            const idx = Math.floor(Math.random() * bodies.length);
+            // Prefer removing the lowest (bottom-most) tiles first,
+            // so the top stays "new" and everything gradually rains down.
+            let idx = -1;
+            let bestY = -Infinity;
+            for (let i=0; i<bodies.length; i++) {
+              const it = bodies[i];
+              if (!it || !it.body) continue;
+              const y = (it.body.position && typeof it.body.position.y === 'number') ? it.body.position.y : 0;
+              if (y > bestY) { bestY = y; idx = i; }
+            }
+            if (idx < 0) return;
             const victim = bodies[idx];
             if (!victim) continue;
 
