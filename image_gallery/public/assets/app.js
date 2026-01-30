@@ -584,11 +584,10 @@
     }
   }
 
-  // lightbox zoom (wheel + double click) and pan (drag when zoomed)
+  // lightbox zoom (wheel + double click) and pan (drag when zoomed) + swipe navigation
   if (lb) {
     lb.addEventListener('wheel', (e) => {
       if (!lb.classList.contains('open')) return;
-      // prevent page scroll while zooming
       e.preventDefault();
       const img = getActiveImg();
       if (!img) return;
@@ -606,18 +605,14 @@
       if (!img) return;
       e.preventDefault();
       setOriginFromEvent(img, e.clientX, e.clientY);
-      if (zoom <= 1.05) {
-        zoom = 2.5;
-      } else {
-        zoom = 1;
-        panX = 0; panY = 0;
-      }
+      if (zoom <= 1.05) zoom = 2.5;
+      else { zoom = 1; panX = 0; panY = 0; }
       applyZoom();
     });
 
+    // drag to pan when zoomed
     let dragging = false;
     let dragSX = 0, dragSY = 0, dragPX = 0, dragPY = 0;
-
     const startDrag = (e) => {
       if (!lb.classList.contains('open')) return;
       if (zoom <= 1.02) return;
@@ -640,8 +635,6 @@
       const img = getActiveImg();
       try { if (img) img.releasePointerCapture(e.pointerId); } catch {}
     };
-
-    // attach to both image layers
     const bindImg = (id) => {
       const img = $(id);
       if (!img) return;
@@ -652,6 +645,55 @@
     };
     bindImg('lbImgA');
     bindImg('lbImgB');
+
+    // swipe left/right to navigate (only when not zoomed)
+    const stage = $('lbStage');
+    let sActive = false;
+    let sX0 = 0, sY0 = 0;
+    let sDx = 0, sDy = 0;
+    const swipeStart = (e) => {
+      if (!lb.classList.contains('open')) return;
+      if (zoom > 1.02) return;
+      const t = (e.touches && e.touches[0]) ? e.touches[0] : null;
+      if (!t) return;
+      sActive = true;
+      sX0 = t.clientX; sY0 = t.clientY;
+      sDx = 0; sDy = 0;
+    };
+    const swipeMove = (e) => {
+      if (!sActive) return;
+      const t = (e.touches && e.touches[0]) ? e.touches[0] : null;
+      if (!t) return;
+      sDx = t.clientX - sX0;
+      sDy = t.clientY - sY0;
+      if (Math.abs(sDx) > 10 && Math.abs(sDx) > Math.abs(sDy) * 1.2) {
+        e.preventDefault();
+      }
+    };
+    const swipeEnd = () => {
+      if (!sActive) return;
+      sActive = false;
+      if (zoom > 1.02) return;
+      if (Math.abs(sDx) > 55 && Math.abs(sDx) > Math.abs(sDy) * 1.2) {
+        if (sDx < 0) nextLb();
+        else prevLb();
+      }
+      sDx = 0; sDy = 0;
+    };
+    if (stage) {
+      stage.addEventListener('touchstart', swipeStart, { passive:true });
+      stage.addEventListener('touchmove', swipeMove, { passive:false });
+      stage.addEventListener('touchend', swipeEnd, { passive:true });
+      stage.addEventListener('touchcancel', swipeEnd, { passive:true });
+    }
+
+    // edge guards: block browser back/forward swipe when lightbox is open
+    for (const sel of ['.swipeGuard.left', '.swipeGuard.right']) {
+      const g = document.querySelector(sel);
+      if (!g) continue;
+      g.addEventListener('touchstart', (e) => { if (lb.classList.contains('open')) e.preventDefault(); }, { passive:false });
+      g.addEventListener('touchmove', (e) => { if (lb.classList.contains('open')) e.preventDefault(); }, { passive:false });
+    }
   }
 
   document.addEventListener('keydown', (e) => {
