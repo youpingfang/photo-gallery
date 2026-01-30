@@ -765,8 +765,8 @@
 
     if ($('viewMode')) {
       const v = ($('viewMode').value || 'bubble');
-      viewMode = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
-      try { localStorage.setItem('gallery_view_mode', viewMode); } catch {}
+      const vm = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
+      setViewMode(vm);
     }
 
     if ($('bubbleCount')) {
@@ -795,11 +795,28 @@
   });
 
   // mode selector
+  function modeLabel(vm){
+    if (vm === 'bubble') return '泡泡';
+    if (vm === 'collage') return '拼贴';
+    if (vm === 'masonry') return '瀑布流';
+    return '泡泡';
+  }
   function syncModeUI(vm){
     const mode = (vm === 'bubble' || vm === 'masonry' || vm === 'collage') ? vm : 'bubble';
     if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (mode === 'bubble') ? 'flex' : 'none';
     if ($('collageHint')) $('collageHint').style.display = (mode === 'collage') ? 'flex' : 'none';
     if ($('colsWrap')) $('colsWrap').style.display = (mode === 'masonry') ? 'flex' : 'none';
+    if ($('modeQuick')) $('modeQuick').textContent = modeLabel(mode);
+  }
+
+  function setViewMode(next){
+    const mode = (next === 'bubble' || next === 'masonry' || next === 'collage') ? next : 'bubble';
+    viewMode = mode;
+    try { localStorage.setItem('gallery_view_mode', viewMode); } catch {}
+    if ($('viewMode')) {
+      try { $('viewMode').value = viewMode; } catch {}
+    }
+    syncModeUI(viewMode);
   }
 
   if ($('viewMode')) {
@@ -810,6 +827,19 @@
       const vm = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
       // preview-only: update dependent UI; apply happens on "保存并应用"
       syncModeUI(vm);
+    });
+  }
+
+  // quick mode button (cycles immediately)
+  if ($('modeQuick')) {
+    syncModeUI(viewMode);
+    on('modeQuick','click', async (e) => {
+      e.preventDefault();
+      const order = ['bubble','collage','masonry'];
+      const cur = order.indexOf(viewMode);
+      const next = order[(cur + 1 + order.length) % order.length];
+      setViewMode(next);
+      await load(currentDir);
     });
   }
 
