@@ -62,6 +62,13 @@
     else if (v === '1') bubbleMode = true;
   } catch {}
 
+  // view mode: bubble | masonry | collage
+  let viewMode = 'bubble';
+  try {
+    const vm = (localStorage.getItem('gallery_view_mode') || '').toString();
+    if (vm === 'bubble' || vm === 'masonry' || vm === 'collage') viewMode = vm;
+  } catch {}
+
   // bubble count (user adjustable)
   const defaultBubbleCount = () => (isMobileLike() ? 20 : 25);
   let bubbleCount = defaultBubbleCount();
@@ -573,29 +580,32 @@
     closeSettings();
   });
 
-  // toggles
-  if ($('bubbleModeBtn')) {
-    setBubbleMode(bubbleMode);
-    on('bubbleModeBtn','click', async (e) => {
-      e.preventDefault();
-      const next = !bubbleMode;
-      setBubbleMode(next);
+  // mode selector
+  if ($('viewMode')) {
+    try { $('viewMode').value = viewMode; } catch {}
+    $('viewMode').addEventListener('change', async () => {
+      const v = ($('viewMode').value || 'bubble');
+      viewMode = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
+      try { localStorage.setItem('gallery_view_mode', viewMode); } catch {}
+
+      // bubbleCount only relevant for bubble
+      if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
       await load(currentDir);
     });
   }
 
   // bubble count input
   if ($('bubbleCount')) {
-    // init default per device
     const def = (isMobileLike() ? 20 : 25);
     const v = clampInt(bubbleCount, 5, 80) || def;
     $('bubbleCount').value = String(v);
+    if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
 
     $('bubbleCount').addEventListener('change', async () => {
       const n = clampInt($('bubbleCount').value, 5, 80) || def;
       bubbleCount = n;
       try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
-      if (bubbleMode) await load(currentDir);
+      if (viewMode === 'bubble') await load(currentDir);
     });
   }
   if ($('metaToggle')) {
@@ -699,8 +709,8 @@
       }
     }
 
-    // bubble mode (restored)
-    if (bubbleMode && window.Matter) {
+    // bubble mode
+    if (viewMode === 'bubble' && window.Matter) {
       const MAX = clampInt(bubbleCount, 5, 80) || (isMobileLike() ? 20 : 25);
       const files = currentFiles.slice(0, MAX);
 
@@ -839,6 +849,74 @@
         try { stage.remove(); } catch {}
       };
 
+      return;
+    }
+
+    // collage mode
+    if (viewMode === 'collage') {
+      const cont = document.createElement('div');
+      cont.className = 'collage';
+      const classes = ['c1','c2','c3','c4','c5','c6','c7','c8','c9','c10'];
+      const activeNames = new Set();
+      const timers = [];
+
+      function pickNext(excludeName){
+        if (!currentFiles.length) return null;
+        // try to avoid duplicates
+        for (let tries=0; tries<40; tries++) {
+          const cand = currentFiles[Math.floor(Math.random() * currentFiles.length)];
+          if (!cand) continue;
+          if (cand.name === excludeName) continue;
+          if (activeNames.has(cand.name)) continue;
+          return cand;
+        }
+        // fallback
+        return currentFiles[Math.floor(Math.random() * currentFiles.length)];
+      }
+
+      function setTileImg(tile, file){
+        if (!tile || !file) return;
+        const img = tile.querySelector('img');
+        if (!img) return;
+        const oldName = tile.getAttribute('data-name') || '';
+        if (oldName) activeNames.delete(oldName);
+        tile.setAttribute('data-name', file.name);
+        activeNames.add(file.name);
+
+        img.classList.remove('on');
+        img.onload = () => { img.classList.add('on'); };
+        img.src = file.thumbUrl || file.url;
+      }
+
+      for (let i=0; i<classes.length; i++) {
+        const t = document.createElement('div');
+        t.className = 'cTile ' + classes[i];
+        t.innerHTML = '<img alt="" />';
+        const f = pickNext('');
+        setTileImg(t, f);
+        t.addEventListener('click', () => {
+          const name = t.getAttribute('data-name') || '';
+          const idx = currentFiles.findIndex(x => x.name === name);
+          openLb(Math.max(0, idx));
+        });
+        cont.appendChild(t);
+
+        // auto update each tile every 5s
+        const id = setInterval(() => {
+          const cur = t.getAttribute('data-name') || '';
+          const nf = pickNext(cur);
+          setTileImg(t, nf);
+        }, 5000);
+        timers.push(id);
+      }
+
+      // cleanup hook
+      bubbleCleanup = () => {
+        for (const id of timers) clearInterval(id);
+      };
+
+      $('content').innerHTML = '';
+      $('content').appendChild(cont);
       return;
     }
 

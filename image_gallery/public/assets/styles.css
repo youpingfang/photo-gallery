@@ -178,9 +178,29 @@ body.immersive #lbMeta{ display:block; }
 .bubbleTile::before{ content:''; position:absolute; inset:-2px; border-radius:inherit; background:conic-gradient(from 180deg at 50% 50%, rgba(0,255,170,.95), rgba(0,170,255,.95), rgba(167,139,250,.95), rgba(255,0,153,.95), rgba(255,214,0,.95), rgba(0,255,170,.95)); filter: blur(12px); opacity:.20; z-index:0; pointer-events:none; }
 .bubbleTile::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); z-index:1; pointer-events:none; }
 
+/* collage mode */
+.collage{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; padding:10px; }
+.collage .cTile{ position:relative; overflow:hidden; border-radius:var(--r-md); background: rgba(255,255,255,.06); }
+.collage .cTile img{ width:100%; height:100%; object-fit:cover; display:block; }
+.collage .cTile img{ opacity:0; transition: opacity .35s ease; }
+.collage .cTile img.on{ opacity:1; }
+
+/* layout similar to screenshot */
+.collage .c1{ grid-column: 1 / span 2; grid-row: 1 / span 1; aspect-ratio: 16/9; }
+.collage .c2{ grid-column: 3 / span 1; grid-row: 1 / span 1; aspect-ratio: 1/1; }
+.collage .c3{ grid-column: 1 / span 1; grid-row: 2 / span 2; aspect-ratio: 3/4; }
+.collage .c4{ grid-column: 2 / span 1; grid-row: 2 / span 3; aspect-ratio: 3/5; }
+.collage .c5{ grid-column: 3 / span 1; grid-row: 2 / span 2; aspect-ratio: 3/5; }
+.collage .c6{ grid-column: 3 / span 1; grid-row: 4 / span 1; aspect-ratio: 3/4; }
+.collage .c7{ grid-column: 1 / span 1; grid-row: 4 / span 1; aspect-ratio: 1/1; }
+.collage .c8{ grid-column: 2 / span 1; grid-row: 5 / span 1; aspect-ratio: 1/1; }
+.collage .c9{ grid-column: 1 / span 1; grid-row: 5 / span 1; aspect-ratio: 4/3; }
+.collage .c10{ grid-column: 3 / span 1; grid-row: 5 / span 1; aspect-ratio: 4/3; }
+
 @media (min-width: 900px){
   .bubbleStage{ height: 100vh; border-radius:0; border:0; box-shadow:none; background:transparent; }
   .wrap{ padding-left:0; padding-right:0; padding-bottom:0; }
+  .collage{ max-width: 980px; margin: 0 auto; }
 }
 
 @media (max-width: 520px){
