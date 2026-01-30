@@ -128,7 +128,33 @@ body.immersive .fab #uploadBtn{ display:none; }
 body.immersive .fab{ left:50%; right:auto; bottom:18px; transform:translateX(-50%); }
 body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); font-size:28px; }
 .fab button{ width:44px; height:44px; padding:0; display:grid; place-items:center; border-radius:var(--r-sm); background: rgba(18,24,40,.78); border:1px solid rgba(255,255,255,.10); color:var(--text); backdrop-filter: blur(10px); font-size:24px; line-height:1; }
-#modeQuick{ font-size:13px; letter-spacing:.2px; }
+@media (prefers-reduced-motion: no-preference){
+  #modeQuick::before{ animation: glowPulse 2.6s ease-in-out infinite; }
+}
+@keyframes glowPulse{
+  0%,100%{ opacity:.55; transform: scale(0.98); }
+  50%{ opacity:1; transform: scale(1.04); }
+}
+#modeQuick{ font-size:13px; letter-spacing:.2px; position:relative; overflow:visible; }
+#modeQuick::before{
+  content:'';
+  position:absolute;
+  inset:-6px;
+  border-radius: calc(var(--r-sm) + 6px);
+  background: radial-gradient(circle at 30% 20%, rgba(56,189,248,.55), rgba(167,139,250,.35) 40%, rgba(0,0,0,0) 72%);
+  filter: blur(10px);
+  opacity:.95;
+  pointer-events:none;
+}
+#modeQuick::after{
+  content:'';
+  position:absolute;
+  inset:-2px;
+  border-radius: calc(var(--r-sm) + 2px);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.16), 0 0 18px rgba(56,189,248,.38), 0 0 26px rgba(167,139,250,.28);
+  opacity:.9;
+  pointer-events:none;
+}
 
 /* lightbox */
 .lb{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,.25); display:none; align-items:center; justify-content:center; padding:10px; overscroll-behavior:contain; touch-action:none; backdrop-filter: blur(10px); transform:translateZ(0); }
