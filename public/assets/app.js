@@ -84,6 +84,11 @@
   let selectMode = false;
   const selected = new Set();
 
+  // upload/delete token (client-side)
+  function getUploadToken(){
+    try { return (localStorage.getItem('gallery_upload_token') || '').trim(); } catch { return ''; }
+  }
+
   // likes
   const likes = new Map(); // name -> count (currentDir scoped)
   function likeKey(name){ return (currentDir || '') + '|' + String(name || ''); }
@@ -794,7 +799,14 @@
 
   // settings modal toggle
   const settings = $('settings');
-  function openSettings(){ settings.classList.add('open'); showFab(); }
+  function openSettings(){
+    settings.classList.add('open');
+    // init token field
+    if ($('uploadToken')) {
+      try { $('uploadToken').value = getUploadToken(); } catch {}
+    }
+    showFab();
+  }
   function closeSettings(){ settings.classList.remove('open'); showFab(); }
   on('settingsBtn','click', (e) => {
     e.preventDefault();
@@ -836,6 +848,10 @@
       const n = clampInt($('bubbleCount').value, 5, 80) || def;
       bubbleCount = n;
       try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
+    }
+
+    if ($('uploadToken')) {
+      try { localStorage.setItem('gallery_upload_token', String($('uploadToken').value || '').trim()); } catch {}
     }
 
     closeSettings();
@@ -936,9 +952,12 @@
     if (!selected.size) return;
     if (!confirm('确认删除已选 ' + selected.size + ' 张图片？')) return;
     const names = Array.from(selected);
+    const tok = getUploadToken();
+    const headers = { 'Content-Type':'application/json' };
+    if (tok) headers['x-upload-token'] = tok;
     const r = await fetch('/api/delete?dir=' + encodeURIComponent(currentDir), {
       method:'POST',
-      headers:{ 'Content-Type':'application/json' },
+      headers,
       body: JSON.stringify({ dir: currentDir, names })
     });
     const j = await r.json();
@@ -956,7 +975,12 @@
     if (!files || !files.length) return;
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
-    await fetch('/api/upload?dir=' + encodeURIComponent(currentDir), { method:'POST', body: fd });
+    const tok = getUploadToken();
+    await fetch('/api/upload?dir=' + encodeURIComponent(currentDir), {
+      method:'POST',
+      headers: tok ? { 'x-upload-token': tok } : undefined,
+      body: fd
+    });
     if ($('file')) $('file').value = '';
     await load(currentDir);
   });
