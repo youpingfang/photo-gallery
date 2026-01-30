@@ -6,8 +6,8 @@ node_modules/
 
 # image gallery
 image_gallery/images/
+image_gallery/**/.thumbs/
 image_gallery/node_modules/
-image_gallery/.thumbs/
 image_gallery/node-standalone.log
 image_gallery/node-standalone.pid
 image_gallery_code.tar.gz
