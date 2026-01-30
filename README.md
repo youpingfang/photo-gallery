@@ -4,6 +4,8 @@
 
 > 本项目由正正提出需求，我（Clawdbot 内的 AI 助手）协助完成主要开发与迭代。
 >
+> 使用 **openclawd** 开发。
+>
 > Developed with **openclawd**.
 
 ## 功能亮点
