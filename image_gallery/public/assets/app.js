@@ -957,11 +957,19 @@
           openLb(Math.max(0, idx));
         });
 
+        // optional fade-in (used for "rain" new tiles)
+        if (opts.fadeIn) {
+          el.style.opacity = '0';
+        }
+
         stage.appendChild(el);
+        if (opts.fadeIn) {
+          requestAnimationFrame(() => { el.style.opacity = '1'; });
+        }
 
         const x = (typeof opts.x === 'number') ? opts.x : (40 + (rr * (W - w - 80)) + w/2);
         const y = (typeof opts.y === 'number') ? opts.y : (20 + (i * 6));
-        const body = Bodies.rectangle(x, y, w, hpx, { restitution:0.88, friction:0.05, frictionAir:0.025 });
+        const body = Bodies.rectangle(x, y, w, hpx, { restitution:0.88, friction:0.05, frictionAir: (opts.air != null ? opts.air : 0.025) });
         Composite.add(engine.world, body);
 
         if (opts.vx != null || opts.vy != null) {
@@ -1014,12 +1022,17 @@
 
             // add new as "rain": spawn above viewport and fall down
             const rx = 40 + (Math.random() * (W - 80));
-            const spawnY = -120 - Math.floor(Math.random() * 120);
+            const spawnY = -260 - Math.floor(Math.random() * 180);
             makeBubble(nf, 2 + Math.floor(Math.random() * Math.max(1, MAX-4)), {
               x: rx,
               y: spawnY,
-              vx: (Math.random() - 0.5) * 2,
-              vy: 6 + Math.random() * 2
+              // gentle drift
+              vx: (Math.random() - 0.5) * 0.8,
+              // start slow so it "floats" down instead of popping in
+              vy: 1.4 + Math.random() * 0.8,
+              // more air resistance for a softer fall
+              air: 0.06,
+              fadeIn: true
             });
           }
         }, 5000);

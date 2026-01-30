@@ -187,7 +187,7 @@ body.immersive #lbMeta{ display:block; }
 
 /* bubble stage */
 .bubbleStage{ position:relative; width:100%; height:min(92vh, 1200px); border-radius:var(--r-lg); border:0; background:transparent; overflow:hidden; box-shadow:none; }
-.bubbleTile{ position:absolute; left:0; top:0; width:160px; height:200px; border-radius:var(--r-sm); overflow:hidden; border:0; background: rgba(255,255,255,.04); box-shadow:0 12px 34px rgba(0,0,0,.28); }
+.bubbleTile{ position:absolute; left:0; top:0; width:160px; height:200px; border-radius:var(--r-sm); overflow:hidden; border:0; background: rgba(255,255,255,.04); box-shadow:0 12px 34px rgba(0,0,0,.28); transition: opacity .7s ease; }
 .bubbleTile img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; position:relative; z-index:2; }
 .bubbleTile::before{ content:''; position:absolute; inset:-2px; border-radius:inherit; background:conic-gradient(from 180deg at 50% 50%, rgba(0,255,170,.95), rgba(0,170,255,.95), rgba(167,139,250,.95), rgba(255,0,153,.95), rgba(255,214,0,.95), rgba(0,255,170,.95)); filter: blur(12px); opacity:.20; z-index:0; pointer-events:none; }
 .bubbleTile::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); z-index:1; pointer-events:none; }
