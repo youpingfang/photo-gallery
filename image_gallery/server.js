@@ -292,13 +292,41 @@ app.get('/api/config', (req, res) => {
   res.json({ buildId: BUILD_ID, autoplayMs: 3000 });
 });
 
+// Avoid stale frontend on mobile/desktop browsers & reverse proxies
+app.use((req, res, next) => {
+  const p = req.path || '';
+  if (req.method === 'GET' && (p === '/' || p.endsWith('.html') || p.startsWith('/assets/'))) {
+    res.setHeader('Cache-Control', 'no-store');
+  }
+  next();
+});
+
 app.use('/assets', express.static(path.join(__dirname, 'public', 'assets'), {
   maxAge: 0,
   setHeaders(res){
     res.setHeader('Cache-Control', 'no-store');
   }
 }));
-app.use('/', express.static(path.join(__dirname, 'public'), { index: 'index.html' }));
+// Serve index.html with BUILD_ID injected for cache-busting
+app.get('/', (req, res) => {
+  try {
+    const p = path.join(__dirname, 'public', 'index.html');
+    const html = fs.readFileSync(p, 'utf8').replaceAll('__BUILD_ID__', BUILD_ID);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
+  } catch (e) {
+    res.status(500).send('index render failed');
+  }
+});
+
+app.use('/', express.static(path.join(__dirname, 'public'), {
+  index: false,
+  maxAge: 0,
+  setHeaders(res){
+    res.setHeader('Cache-Control', 'no-store');
+  }
+}));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Image Gallery listening on :${PORT}`);
