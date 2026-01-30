@@ -461,6 +461,8 @@
     autoplayEnabled = false;
     autoplayRunning = false;
     apStop();
+    // ensure FAB is visible when entering lightbox
+    try { document.body.classList.remove('fabHidden'); } catch {}
     showLbInternal(index);
   }
 
@@ -472,6 +474,8 @@
     autoplayRunning = false;
     apStop();
     resetZoom();
+    // show FAB when leaving lightbox
+    try { document.body.classList.remove('fabHidden'); } catch {}
   }
 
   function renderThumbs(){
@@ -564,11 +568,15 @@
     if (!lb || !lb.classList.contains('open')) return;
     lb.classList.remove('ctlHide');
     try { if (lbCtlTimer) clearTimeout(lbCtlTimer); } catch {}
+    // keep right-bottom FAB in sync with lightbox controls
+    try { document.body.classList.remove('fabHidden'); } catch {}
+
     lbCtlTimer = setTimeout(() => {
       // keep controls while zoomed (user likely navigating/panning)
       if (zoom > 1.02) return;
       lb.classList.add('ctlHide');
-    }, 2000);
+      try { document.body.classList.add('fabHidden'); } catch {}
+    }, 2200);
   }
   if (lb) {
     for (const ev of ['pointerdown','pointermove','touchstart','wheel','keydown']) {
