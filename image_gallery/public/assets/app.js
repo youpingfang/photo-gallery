@@ -845,8 +845,9 @@
       const H = Math.max(420, Math.floor(rect.height));
 
       const wallOpts = { isStatic:true, restitution:0.85, friction:0.02 };
+      // Walls: keep sides/bottom, move top wall far above so new tiles can "rain" in from above.
       Composite.add(engine.world, [
-        Bodies.rectangle(W/2, -24, W+200, 48, wallOpts),
+        Bodies.rectangle(W/2, -220, W+260, 120, wallOpts),
         Bodies.rectangle(W/2, H+24, W+200, 48, wallOpts),
         Bodies.rectangle(-24, H/2, 48, H+200, wallOpts),
         Bodies.rectangle(W+24, H/2, 48, H+200, wallOpts),
@@ -856,7 +857,7 @@
       const bodies = [];
       const currentNames = new Set();
 
-      function makeBubble(f, i){
+      function makeBubble(f, i, opts = {}){
         const h = hashString(f.name);
         const rr = (h % 1000) / 1000;
 
@@ -891,10 +892,14 @@
 
         stage.appendChild(el);
 
-        const x = 40 + (rr * (W - w - 80)) + w/2;
-        const y = 20 + (i * 6);
-        const body = Bodies.rectangle(x, y, w, hpx, { restitution:0.9, friction:0.04, frictionAir:0.03 });
+        const x = (typeof opts.x === 'number') ? opts.x : (40 + (rr * (W - w - 80)) + w/2);
+        const y = (typeof opts.y === 'number') ? opts.y : (20 + (i * 6));
+        const body = Bodies.rectangle(x, y, w, hpx, { restitution:0.88, friction:0.05, frictionAir:0.025 });
         Composite.add(engine.world, body);
+
+        if (opts.vx != null || opts.vy != null) {
+          try { Body.setVelocity(body, { x: opts.vx || 0, y: opts.vy || 0 }); } catch {}
+        }
 
         currentNames.add(f.name);
         bodies.push({ body, el, w, h: hpx, name: f.name });
@@ -905,12 +910,12 @@
       const runner = Runner.create();
       Runner.run(runner, engine);
 
-      // keep moving
+      // subtle drift (avoid fighting the "rain" feeling)
       const kickInt = setInterval(() => {
         for (const it of bodies){
-          Body.applyForce(it.body, it.body.position, { x:(Math.random()-0.5)*0.0012, y:(Math.random()-0.5)*0.0010 });
+          Body.applyForce(it.body, it.body.position, { x:(Math.random()-0.5)*0.0010, y:0 });
         }
-      }, 650);
+      }, 800);
 
       // rotate bubbles to show more
       let swapInt = 0;
@@ -940,8 +945,15 @@
             currentNames.delete(victim.name);
             bodies.splice(idx, 1);
 
-            // add new near top
-            makeBubble(nf, 2 + Math.floor(Math.random() * Math.max(1, MAX-4)));
+            // add new as "rain": spawn above viewport and fall down
+            const rx = 40 + (Math.random() * (W - 80));
+            const spawnY = -120 - Math.floor(Math.random() * 120);
+            makeBubble(nf, 2 + Math.floor(Math.random() * Math.max(1, MAX-4)), {
+              x: rx,
+              y: spawnY,
+              vx: (Math.random() - 0.5) * 2,
+              vy: 6 + Math.random() * 2
+            });
           }
         }, 5000);
       }
