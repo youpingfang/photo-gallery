@@ -628,10 +628,31 @@
     else if (e.key === 'Escape') closeLb();
   });
 
+  // floating buttons auto-hide
+  let fabTimer = 0;
+  function showFab(){
+    try { document.body.classList.remove('fabHidden'); } catch {}
+    try { if (fabTimer) clearTimeout(fabTimer); } catch {}
+    fabTimer = setTimeout(() => {
+      // don't hide while settings/lightbox is open
+      const s = $('settings');
+      const lb = $('lb');
+      if (s && s.classList.contains('open')) return;
+      if (lb && lb.classList.contains('open')) return;
+      try { document.body.classList.add('fabHidden'); } catch {}
+    }, 2600);
+  }
+  // show on user activity
+  for (const ev of ['pointerdown','pointermove','touchstart','scroll','keydown']) {
+    window.addEventListener(ev, showFab, { passive:true });
+  }
+  // show initially then hide
+  showFab();
+
   // settings modal toggle
   const settings = $('settings');
-  function openSettings(){ settings.classList.add('open'); }
-  function closeSettings(){ settings.classList.remove('open'); }
+  function openSettings(){ settings.classList.add('open'); showFab(); }
+  function closeSettings(){ settings.classList.remove('open'); showFab(); }
   on('settingsBtn','click', (e) => {
     e.preventDefault();
     if (settings.classList.contains('open')) closeSettings(); else openSettings();

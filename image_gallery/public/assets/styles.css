@@ -121,7 +121,8 @@ button:active{ transform: translateY(1px); }
 input{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.12); color:var(--text); border-radius:var(--r-sm); padding:10px 12px; min-width:240px; outline:none; }
 
 /* floating action buttons */
-.fab{ position:fixed; right:14px; bottom:88px; display:flex; flex-direction:column; gap:10px; z-index:30; }
+.fab{ position:fixed; right:14px; bottom:88px; display:flex; flex-direction:column; gap:10px; z-index:30; transition: opacity .25s ease, transform .25s ease; }
+body.fabHidden .fab{ opacity:0; pointer-events:none; transform: translateY(8px); }
 body.immersive .fab #settingsBtn, body.immersive .fab #uploadBtn{ display:none; }
 body.immersive .fab{ left:50%; right:auto; bottom:18px; transform:translateX(-50%); }
 body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); font-size:28px; }
