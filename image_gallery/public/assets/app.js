@@ -681,8 +681,10 @@
     e.preventDefault();
     e.stopPropagation();
     if (!$('lb') || !$('lb').classList.contains('open')) {
-      if (currentFiles.length) openLb(0);
-      else return;
+      if (!currentFiles.length) return;
+      // start from a random image instead of always the first
+      const idx = Math.floor(Math.random() * currentFiles.length);
+      openLb(idx);
     }
     if (autoplayRunning) stopAutoplay();
     else startAutoplay();
