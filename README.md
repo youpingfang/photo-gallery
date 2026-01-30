@@ -4,6 +4,12 @@
 
 ## 功能亮点
 
+## 界面预览
+
+| 拼贴模式 | 泡泡模式 | 圆形/椭圆效果 |
+|---|---|---|
+| ![拼贴模式](docs/screenshots/collage.jpg) | ![泡泡模式](docs/screenshots/bubble.jpg) | ![圆形效果](docs/screenshots/bubble-circles.jpg) |
+
 - 三种浏览模式
   - **泡泡模式**：图片像“下雨”从上往下落；新图尽量在上方，旧图优先从底部替换
   - **拼贴模式**：固定模板拼图墙，格子随机轮播切换，过渡更柔和
