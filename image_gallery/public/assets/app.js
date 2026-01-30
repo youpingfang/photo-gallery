@@ -545,6 +545,7 @@
     if (settings.classList.contains('open')) closeSettings(); else openSettings();
   });
   on('settingsClose','click', (e) => { e.preventDefault(); closeSettings(); });
+  on('cancelSettings','click', (e) => { e.preventDefault(); closeSettings(); });
   if (settings) settings.addEventListener('click', (e) => { if (e.target === settings) closeSettings(); });
   document.addEventListener('keydown', (e) => { if (settings.classList.contains('open') && e.key === 'Escape') closeSettings(); });
 
@@ -605,8 +606,9 @@
     $('viewMode').addEventListener('change', () => {
       const v = ($('viewMode').value || 'bubble');
       const vm = (v === 'bubble' || v === 'masonry' || v === 'collage') ? v : 'bubble';
-      // preview-only: just update dependent UI; apply happens on "保存并应用"
+      // preview-only: update dependent UI; apply happens on "保存并应用"
       if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (vm === 'bubble') ? 'flex' : 'none';
+      if ($('collageHint')) $('collageHint').style.display = (vm === 'collage') ? 'flex' : 'none';
     });
   }
 

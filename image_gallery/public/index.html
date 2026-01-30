@@ -65,53 +65,70 @@
     <div class="lb-inner" style="max-width:520px; height:auto;">
       <div class="settingsCard">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-          <div style="font-weight:800;">显示配置</div>
+          <div style="font-weight:900;">设置</div>
           <a href="#" id="settingsClose" style="color:var(--accent);text-decoration:none;">关闭</a>
         </div>
-        <div style="margin-top:12px;color:var(--muted);font-size:13px;">本地图片展示（Gallery）</div>
-        <div style="margin-top:6px;color:var(--muted);font-size:13px;">手机建议 2~3 列，空洞会更少。</div>
         <div style="margin-top:10px;color:rgba(255,255,255,.45);font-size:12px;">Build: <span id="buildId">…</span></div>
 
-        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
-          <label style="display:flex;gap:8px;align-items:center;">
-            <span style="min-width:60px;color:var(--muted);">目录</span>
-            <input id="dir" placeholder="子目录（例如: 2026/01）" style="min-width:180px;" />
-          </label>
-          <button id="go" class="btnGhost">打开</button>
-        </div>
+        <div class="setSection">
+          <div class="setTitle">视图</div>
 
-        <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;">
-          <label style="display:flex;gap:8px;align-items:center;">
-            <span style="min-width:60px;color:var(--muted);">列数</span>
-            <select id="cols" class="sel">
-              <option value="auto">自动（按屏幕宽度平铺）</option>
+          <div class="setRow">
+            <div class="setLabel">模式</div>
+            <select id="viewMode" class="sel" style="width:180px;">
+              <option value="bubble">泡泡</option>
+              <option value="collage">拼贴</option>
+              <option value="masonry">瀑布流</option>
+            </select>
+          </div>
+
+          <div class="setRow" id="bubbleCountWrap">
+            <div class="setLabel">泡泡数量</div>
+            <input id="bubbleCount" type="number" min="5" max="80" step="1" value="25" style="width:120px;min-width:120px;" />
+          </div>
+
+          <div class="setRow" id="collageHint" style="display:none;">
+            <div class="setLabel">拼贴</div>
+            <div class="setHelp">10格随机轮播，每格每 5 秒自动换图。</div>
+          </div>
+
+          <div class="setRow">
+            <div class="setLabel">列数</div>
+            <select id="cols" class="sel" style="width:180px;">
+              <option value="auto">自动</option>
               <option value="1">1</option>
               <option value="2">2</option>
               <option value="3">3</option>
               <option value="4">4</option>
               <option value="5">5</option>
             </select>
-          </label>
-          <button id="apply" class="btnPrimary">保存并应用</button>
-          <button id="uploadInSettings" class="btnGhost">上传</button>
-          <label class="miniField" style="display:flex;gap:8px;align-items:center;">
-            <span style="min-width:60px;color:var(--muted);">模式</span>
-            <select id="viewMode" class="sel" style="width:160px;min-width:160px;">
-              <option value="bubble">泡泡</option>
-              <option value="masonry">瀑布流</option>
-              <option value="collage">拼贴</option>
-            </select>
-          </label>
-
-          <label class="miniField" id="bubbleCountWrap" style="display:flex;gap:8px;align-items:center;">
-            <span style="min-width:60px;color:var(--muted);">泡泡数量</span>
-            <input id="bubbleCount" type="number" min="5" max="80" step="1" value="25" style="width:90px;min-width:90px;" />
-          </label>
-
-          <button id="metaToggle" class="btnGhost">信息：关</button>
-          <button id="enterDelete" class="btnDanger">删除模式</button>
+          </div>
         </div>
-        <div style="margin-top:10px;color:var(--muted);font-size:12px;">提示：删除模式下点击图片可选中，支持全选/删除；完成后点“退出删除模式”。</div>
+
+        <div class="setSection">
+          <div class="setTitle">信息</div>
+          <div class="setRow">
+            <div class="setLabel">拍摄信息</div>
+            <button id="metaToggle" class="btnGhost">信息：关</button>
+          </div>
+        </div>
+
+        <div class="setSection">
+          <div class="setTitle">管理</div>
+          <div class="setRow">
+            <div class="setLabel">上传</div>
+            <button id="uploadInSettings" class="btnGhost">上传</button>
+          </div>
+          <div class="setRow">
+            <div class="setLabel">删除</div>
+            <button id="enterDelete" class="btnDanger">删除模式</button>
+          </div>
+        </div>
+
+        <div class="setFooter">
+          <button id="cancelSettings" class="btnGhost">取消</button>
+          <button id="apply" class="btnPrimary">保存并应用</button>
+        </div>
       </div>
     </div>
   </div>

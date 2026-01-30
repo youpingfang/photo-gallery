@@ -170,6 +170,12 @@ body.immersive #lbMeta{ display:block; }
 
 /* settings card */
 .settingsCard{ background:var(--card); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:14px; }
+.setSection{ margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,.08); }
+.setTitle{ font-weight:900; letter-spacing:.2px; margin-bottom:10px; }
+.setRow{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px; }
+.setLabel{ color:rgba(255,255,255,.72); font-size:13px; min-width:72px; }
+.setHelp{ color:rgba(255,255,255,.55); font-size:12px; line-height:1.25; }
+.setFooter{ display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top:16px; padding-top:12px; border-top:1px solid rgba(255,255,255,.08); }
 
 /* bubble stage */
 .bubbleStage{ position:relative; width:100%; height:min(92vh, 1200px); border-radius:var(--r-lg); border:0; background:transparent; overflow:hidden; box-shadow:none; }
