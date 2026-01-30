@@ -880,7 +880,7 @@
       cont.className = 'collage';
       const classes = ['c1','c2','c3','c4','c5','c6','c7','c8','c9','c10'];
       const activeNames = new Set();
-      const timers = [];
+      let timer = null;
 
       function pickNext(excludeName){
         if (!currentFiles.length) return null;
@@ -910,6 +910,7 @@
         img.src = file.thumbUrl || file.url;
       }
 
+      const tiles = [];
       for (let i=0; i<classes.length; i++) {
         const t = document.createElement('div');
         t.className = 'cTile ' + classes[i];
@@ -922,19 +923,30 @@
           openLb(Math.max(0, idx));
         });
         cont.appendChild(t);
-
-        // auto update each tile every 5s
-        const id = setInterval(() => {
-          const cur = t.getAttribute('data-name') || '';
-          const nf = pickNext(cur);
-          setTileImg(t, nf);
-        }, 5000);
-        timers.push(id);
+        tiles.push(t);
       }
+
+      // auto update: every 5s randomly swap ONE small tile (avoid full refresh)
+      const smallClassSet = new Set(['c2','c7','c8','c9','c10','c6']);
+      const smallTiles = tiles.filter(t => {
+        const cls = String(t.className || '');
+        for (const k of smallClassSet) if (cls.includes(k)) return true;
+        return false;
+      });
+      const pool = (smallTiles.length ? smallTiles : tiles);
+
+      timer = setInterval(() => {
+        if (!pool.length) return;
+        const t = pool[Math.floor(Math.random() * pool.length)];
+        const cur = t.getAttribute('data-name') || '';
+        const nf = pickNext(cur);
+        setTileImg(t, nf);
+      }, 5000);
 
       // cleanup hook
       bubbleCleanup = () => {
-        for (const id of timers) clearInterval(id);
+        try { if (timer) clearInterval(timer); } catch {}
+        timer = null;
       };
 
       $('content').innerHTML = '';
