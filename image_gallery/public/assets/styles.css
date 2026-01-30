@@ -49,6 +49,7 @@ header{ display:none !important; }
 .dirs{ display:none; }
 .wrap{ padding:10px 10px 18px; max-width:none; margin:0 auto; }
 body.modeCollage .wrap{ padding:0; }
+html, body{ height:100%; }
 
 /* Masonry columns */
 .grid{ column-gap:3px; column-count: var(--cols,3); }
@@ -252,10 +253,13 @@ body.immersive #lbMeta{ display:block; }
   /* mobile collage: balanced mosaic (avoid big blanks) */
   .collage{
     width:100%;
-    /* Use svh so mobile browser chrome doesn't create extra blank space */
+    /* Prefer dvh (dynamic viewport) to reduce bottom blank on mobile browsers */
+    height:100dvh;
     height:100svh;
     margin:0;
+    /* keep top/bottom padding symmetric for nicer look */
     padding:10px;
+    padding-top: calc(10px + env(safe-area-inset-top));
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
     box-sizing:border-box;
     gap:10px;
