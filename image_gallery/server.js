@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import sharp from 'sharp';
 import exifr from 'exifr';
+import { createClient } from 'redis';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,6 +15,64 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const IMAGES_DIR = process.env.IMAGES_DIR || '/images';
 const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
+const REDIS_URL = process.env.REDIS_URL || '';
+
+// Optional Redis cache (metadata only)
+let redis = null;
+async function initRedis(){
+  if (!REDIS_URL) return null;
+  try {
+    redis = createClient({ url: REDIS_URL });
+    redis.on('error', (err) => {
+      console.warn('redis error', String(err));
+    });
+    await redis.connect();
+    console.log('Redis connected');
+    return redis;
+  } catch (e) {
+    console.warn('Redis disabled:', String(e));
+    try { if (redis) await redis.quit(); } catch {}
+    redis = null;
+    return null;
+  }
+}
+
+function cacheKeyImages(subdir){
+  const d = (subdir || '').toString();
+  return 'ig:images:v2:' + d;
+}
+function cacheKeyMeta(imageAbs, mtimeMs){
+  return 'ig:meta:v1:' + imageAbs + '|' + String(mtimeMs);
+}
+async function cacheGetJson(key){
+  if (!redis) return null;
+  try {
+    const v = await redis.get(key);
+    if (!v) return null;
+    return JSON.parse(v);
+  } catch {
+    return null;
+  }
+}
+async function cacheSetJson(key, obj, ttlSec){
+  if (!redis) return;
+  try {
+    await redis.set(key, JSON.stringify(obj), { EX: ttlSec });
+  } catch {}
+}
+async function invalidateImagesCache(subdir){
+  if (!redis) return;
+  const parts = (subdir || '').toString().split('/').filter(Boolean);
+  const keys = new Set();
+  keys.add(cacheKeyImages(''));
+  // invalidate chain: a, a/b, a/b/c
+  let cur = '';
+  for (const p of parts) {
+    cur = cur ? (cur + '/' + p) : p;
+    keys.add(cacheKeyImages(cur));
+  }
+  try { await redis.del(Array.from(keys)); } catch {}
+}
 
 // 测试模式：不设置 token 时允许删除（不安全）。生产环境强烈建议设置 UPLOAD_TOKEN。
 
@@ -94,7 +153,7 @@ const upload = multer({
   }
 });
 
-app.post('/api/upload', upload.array('files', 50), (req, res) => {
+app.post('/api/upload', upload.array('files', 50), async (req, res) => {
   if (UPLOAD_TOKEN) {
     const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
     if (token !== UPLOAD_TOKEN) return res.status(401).json({ error: 'bad token' });
@@ -104,6 +163,11 @@ app.post('/api/upload', upload.array('files', 50), (req, res) => {
     name: f.filename,
     size: f.size,
   }));
+
+  // invalidate cached directory listing
+  const subdir = (req.query.dir || '').toString();
+  await invalidateImagesCache(subdir);
+
   res.json({ ok: true, uploaded: files.length, files });
 });
 
@@ -134,7 +198,7 @@ app.get('/api/thumb', async (req, res) => {
   }
 });
 
-app.post('/api/delete', express.json({ limit: '1mb' }), (req, res) => {
+app.post('/api/delete', express.json({ limit: '1mb' }), async (req, res) => {
   // 简单鉴权：如果设置了 UPLOAD_TOKEN，则删除也必须带 token
   if (UPLOAD_TOKEN) {
     const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
@@ -171,6 +235,9 @@ app.post('/api/delete', express.json({ limit: '1mb' }), (req, res) => {
     }
   }
 
+  // invalidate cached directory listing
+  await invalidateImagesCache(subdir);
+
   res.json({ ok: true, deleted, failed });
 });
 
@@ -184,35 +251,45 @@ app.get('/api/images', async (req, res) => {
   const limit = Math.max(1, Math.min(500, limitRaw));
 
   try {
-    const entries = fs.readdirSync(abs, { withFileTypes: true });
+    // Try Redis cached listing first (metadata only)
+    let cached = await cacheGetJson(cacheKeyImages(subdir));
 
-    const dirs = [];
-    const allFiles = [];
+    if (!cached) {
+      const entries = fs.readdirSync(abs, { withFileTypes: true });
+      const dirs = [];
+      const allFiles = [];
 
-    for (const e of entries) {
-      if (e.isDirectory()) {
-        // 跳过缩略图目录
-        if (e.name === THUMBS_SUBDIR) continue;
-        dirs.push(e.name);
-      } else if (e.isFile() && isImageFile(e.name)) {
-        const rel = path.posix.join('/', subdir.split(path.sep).join('/'), e.name).replace(/\\/g, '/');
-        allFiles.push({
-          name: e.name,
-          url: `/images${rel}`,
-          thumbUrl: `/api/thumb?dir=${encodeURIComponent(subdir)}&name=${encodeURIComponent(e.name)}`,
-        });
+      for (const e of entries) {
+        if (e.isDirectory()) {
+          if (e.name === THUMBS_SUBDIR) continue;
+          dirs.push(e.name);
+        } else if (e.isFile() && isImageFile(e.name)) {
+          const rel = path.posix.join('/', subdir.split(path.sep).join('/'), e.name).replace(/\\/g, '/');
+          allFiles.push({
+            name: e.name,
+            url: `/images${rel}`,
+            thumbUrl: `/api/thumb?dir=${encodeURIComponent(subdir)}&name=${encodeURIComponent(e.name)}`,
+          });
+        }
       }
+
+      dirs.sort((a, b) => a.localeCompare(b));
+      allFiles.sort((a, b) => a.name.localeCompare(b.name));
+
+      cached = { dir: subdir, dirs, allFiles, total: allFiles.length };
+      // 30s is enough to absorb bursts while keeping directory changes responsive
+      await cacheSetJson(cacheKeyImages(subdir), cached, 30);
     }
 
-    dirs.sort((a, b) => a.localeCompare(b));
-    allFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const total = cached.total || (cached.allFiles ? cached.allFiles.length : 0);
+    const allFiles = cached.allFiles || [];
+    const dirs = cached.dirs || [];
 
-    const total = allFiles.length;
     const files = allFiles.slice(offset, offset + limit);
     const nextOffset = Math.min(total, offset + files.length);
     const hasMore = nextOffset < total;
 
-    res.json({ dir: subdir, dirs, files, total, offset, limit, nextOffset, hasMore });
+    res.json({ dir: subdir, dirs, files, total, offset, limit, nextOffset, hasMore, cached: !!redis });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
@@ -229,8 +306,18 @@ app.get('/api/meta', async (req, res) => {
   try {
     const st = fs.statSync(imageAbs);
     const cacheKey = imageAbs + '|' + st.mtimeMs;
+
+    // memory cache
     if (exifCache.has(cacheKey)) {
       return res.json({ ok: true, ...exifCache.get(cacheKey) });
+    }
+
+    // redis cache
+    const rKey = cacheKeyMeta(imageAbs, st.mtimeMs);
+    const cached = await cacheGetJson(rKey);
+    if (cached) {
+      exifCache.set(cacheKey, cached);
+      return res.json({ ok: true, ...cached, cached: true });
     }
 
     let takenAt = null;
@@ -273,6 +360,7 @@ app.get('/api/meta', async (req, res) => {
 
     const out = { takenAt, gps, place };
     exifCache.set(cacheKey, out);
+    await cacheSetJson(rKey, out, 60 * 60 * 24 * 7); // 7 days
     res.json({ ok: true, ...out });
   } catch (err) {
     res.status(500).json({ error: String(err) });
