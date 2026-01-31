@@ -90,8 +90,42 @@ npm start
 ## 使用说明
 
 - 右下角 **“xxx\n模式”按钮**：快速切换「泡泡 / 拼贴 / 瀑布流」
-- ⚙️ 设置：列数、泡泡数量、信息显示、删除模式等
+- ⚙️ 设置：列数、泡泡数量、删除模式等
 - PWA（iPhone）：Safari → 分享 → 添加到主屏幕
+
+---
+
+## Immich 联动（开源照片库）
+
+本项目支持把 **Immich**（开源自托管照片库）作为远程数据源：
+- 由服务端通过 Immich API 拉取相册与资产
+- 前端展示为本画廊的三种模式 + 大图浏览
+
+### 你能得到什么
+
+- 把 Immich 里的某个相册做成一个“公开展示画廊”（适合分享给朋友/家人）
+- 仍然保留管理能力：只有管理员能改公开相册、上传/删除等
+
+### 配置方式（Docker Compose）
+
+1) 在 `.env`（不要提交）里填：
+
+```env
+IMMICH_URL=https://your-immich-domain
+IMMICH_API_KEY=your_immich_api_key
+ADMIN_PASS=your_admin_pass
+IMAGE_DIR_HOST=/path/to/your/images
+```
+
+2) 启动：
+
+```bash
+docker compose up -d
+```
+
+3) 打开画廊网页 → ⚙️ 设置 → 输入管理密码解锁 → 数据源选择「远程 Immich」→ 选择要公开的相册 → 保存。
+
+> 这个“公开相册选择”会持久化到 `GALLERY_CONFIG_PATH` 指定的 json 文件中（默认写入 `/images/.gallery_config.json`），容器重启也不会丢。
 
 ---
 
@@ -100,7 +134,8 @@ npm start
 如果部署到公网，强烈建议：
 
 1) 设置 `ADMIN_PASS`（用于解锁管理设置；上传/删除也需要先解锁）
-2) 如部署到公网，建议通过反向代理做访问控制（Basic Auth / IP 白名单 / VPN）
+2) `IMMICH_API_KEY` 只放在服务端环境变量中（不要写进仓库/前端）
+3) 如部署到公网，建议通过反向代理做访问控制（Basic Auth / IP 白名单 / VPN）
 
 ---
 
