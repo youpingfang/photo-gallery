@@ -109,15 +109,18 @@
         </div>
 
         <div class="setSection adminOnly" id="dataSourceSec">
-          <div class="setTitle">数据源</div>
+          <div class="setTitle">公开展示的数据源</div>
           <div class="setRow">
-            <div class="setLabel">来源</div>
+            <div class="setLabel">让大家看到</div>
             <select id="sourceMode" class="sel" style="width:180px;">
-              <option value="auto">自动（本地为空时用远程）</option>
-              <option value="local">本地</option>
-              <option value="dav">远程 WebDAV</option>
-              <option value="immich">远程 Immich</option>
+              <option value="local">本地（/images）</option>
+              <option value="immich">Immich 相册</option>
+              <option value="dav">WebDAV（仅管理员）</option>
             </select>
+          </div>
+          <div class="setRow">
+            <div class="setLabel">说明</div>
+            <div class="setHelp">访客无需密码，进入后看到的就是你在这里“保存并应用”的数据源（以最后一次保存为准）。</div>
           </div>
           <!-- WebDAV 连接信息由服务端环境变量配置（不在 Web 端填写） -->
           <div class="setRow immichOnly">
@@ -132,7 +135,7 @@
           </div>
           <div class="setRow">
             <div class="setLabel">应用</div>
-            <div class="setHelp">保存后立即生效；本地为空时会自动切到远程。</div>
+            <div class="setHelp">点击「保存并应用」后立即生效，并写入配置文件；下次打开仍保持。</div>
           </div>
         </div>
 

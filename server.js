@@ -964,14 +964,25 @@ app.post('/api/admin/public', express.json({ limit:'50kb' }), (req, res) => {
   if (!requireAdmin(req, res)) return;
   const source = (req.body?.source || '').toString();
   const immichAlbumId = (req.body?.immichAlbumId || '').toString();
-  if (source !== 'immich') return res.status(400).json({ error:'unsupported source' });
-  if (!immichAlbumId) return res.status(400).json({ error:'missing album id' });
 
   const cfg = loadGalleryCfg();
-  cfg.publicSource = 'immich';
-  cfg.immichAlbumId = immichAlbumId;
-  saveGalleryCfg(cfg);
-  res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+
+  if (source === 'local') {
+    cfg.publicSource = 'local';
+    cfg.immichAlbumId = '';
+    saveGalleryCfg(cfg);
+    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+  }
+
+  if (source === 'immich') {
+    if (!immichAlbumId) return res.status(400).json({ error:'missing album id' });
+    cfg.publicSource = 'immich';
+    cfg.immichAlbumId = immichAlbumId;
+    saveGalleryCfg(cfg);
+    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+  }
+
+  return res.status(400).json({ error:'unsupported source' });
 });
 
 app.get('/api/public', (req, res) => {
@@ -986,10 +997,6 @@ app.get('/api/public', (req, res) => {
 app.get('/api/public/images', async (req, res) => {
   const cfg = loadGalleryCfg();
   const source = (cfg.publicSource || 'local').toString();
-  if (source !== 'immich') return res.status(400).json({ error:'public source not configured' });
-  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
-  const albumId = (cfg.immichAlbumId || '').toString();
-  if (!albumId) return res.status(400).json({ error:'public album not configured' });
 
   const offset = Math.max(0, parseInt((req.query.offset ?? '0').toString(), 10) || 0);
   const limitRaw = parseInt((req.query.limit ?? '120').toString(), 10) || 120;
@@ -997,27 +1004,121 @@ app.get('/api/public/images', async (req, res) => {
   const order = (req.query.order || '').toString();
   const seed = (req.query.seed || '').toString();
 
-  try {
-    const album = await immichJson('/api/albums/' + encodeURIComponent(albumId));
-    const assets = Array.isArray(album?.assets) ? album.assets : [];
-    const allFiles = assets
-      .filter(a => (a?.type || '').toString().toUpperCase() === 'IMAGE')
-      .map(a => ({
-        name: String(a.id),
-        url: `/api/immich/file?id=${encodeURIComponent(String(a.id))}`,
-        thumbUrl: `/api/immich/thumb?id=${encodeURIComponent(String(a.id))}`,
-      }));
+  // Default: local
+  if (source === 'local') {
+    const subdir = (req.query.dir || '').toString();
+    const abs = safeJoin(IMAGES_DIR, subdir);
+    if (!abs) return res.status(400).json({ error: 'bad dir' });
 
-    const shuffled = (order === 'random') ? seededShuffle(allFiles, seed || String(Date.now())) : allFiles;
-    const total = shuffled.length;
-    const files = shuffled.slice(offset, offset + limit);
-    const nextOffset = Math.min(total, offset + files.length);
-    const hasMore = nextOffset < total;
+    try {
+      const entries = fs.readdirSync(abs, { withFileTypes: true });
+      const dirs = [];
+      const baseAll = [];
 
-    res.json({ dir:'public', dirs:[], files, total, offset, limit, nextOffset, hasMore });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
+      for (const e of entries) {
+        if (e.isDirectory()) {
+          if (e.name === THUMBS_SUBDIR) continue;
+          dirs.push(e.name);
+        } else if (e.isFile() && isImageFile(e.name)) {
+          const rel = path.posix.join('/', subdir.split(path.sep).join('/'), e.name).replace(/\\/g, '/');
+          baseAll.push({
+            name: e.name,
+            url: `/images${rel}`,
+            thumbUrl: `/api/thumb?dir=${encodeURIComponent(subdir)}&name=${encodeURIComponent(e.name)}`,
+          });
+        }
+      }
+
+      dirs.sort((a, b) => a.localeCompare(b));
+      baseAll.sort((a, b) => a.name.localeCompare(b.name));
+
+      // If root is empty, try a recursive scan so first-time visitors still see local images.
+      let allFiles = baseAll;
+      if (!subdir && allFiles.length === 0) {
+        const stack = [{ rel: '', abs: IMAGES_DIR }];
+        const flat = [];
+
+        while (stack.length) {
+          const cur = stack.pop();
+          let ents = [];
+          try { ents = fs.readdirSync(cur.abs, { withFileTypes: true }); } catch { ents = []; }
+
+          for (const ent of ents) {
+            if (ent.isDirectory()) {
+              if (ent.name === THUMBS_SUBDIR) continue;
+              const nextRel = cur.rel ? (cur.rel + '/' + ent.name) : ent.name;
+              const nextAbs = path.join(cur.abs, ent.name);
+              stack.push({ rel: nextRel, abs: nextAbs });
+            } else if (ent.isFile() && isImageFile(ent.name)) {
+              const d = cur.rel;
+              const relUrl = path.posix.join('/', (d ? d : ''), ent.name).replace(/\\/g, '/');
+              flat.push({
+                name: ent.name,
+                url: `/images${relUrl}`,
+                thumbUrl: `/api/thumb?dir=${encodeURIComponent(d)}&name=${encodeURIComponent(ent.name)}`,
+              });
+            }
+          }
+        }
+
+        flat.sort((a, b) => (a.url || '').localeCompare(b.url || ''));
+        allFiles = flat;
+      }
+
+      const ordered = (order === 'random') ? seededShuffle(allFiles, seed || String(Date.now())) : allFiles;
+      const total = ordered.length;
+      const files = ordered.slice(offset, offset + limit);
+      const nextOffset = Math.min(total, offset + files.length);
+      const hasMore = nextOffset < total;
+      const empty = total === 0;
+
+      return res.json({
+        dir: subdir,
+        dirs,
+        files,
+        total,
+        offset,
+        limit,
+        nextOffset,
+        hasMore,
+        empty,
+        emptyHint: empty ? '暂无图片：请先上传图片，或在设置里切换图片源（如 Immich）。' : ''
+      });
+    } catch (e) {
+      return res.status(500).json({ error: String(e) });
+    }
   }
+
+  // Immich: public album selected by admin
+  if (source === 'immich') {
+    if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+    const albumId = (cfg.immichAlbumId || '').toString();
+    if (!albumId) return res.status(400).json({ error:'public album not configured' });
+
+    try {
+      const album = await immichJson('/api/albums/' + encodeURIComponent(albumId));
+      const assets = Array.isArray(album?.assets) ? album.assets : [];
+      const allFiles = assets
+        .filter(a => (a?.type || '').toString().toUpperCase() === 'IMAGE')
+        .map(a => ({
+          name: String(a.id),
+          url: `/api/immich/file?id=${encodeURIComponent(String(a.id))}`,
+          thumbUrl: `/api/immich/thumb?id=${encodeURIComponent(String(a.id))}`,
+        }));
+
+      const shuffled = (order === 'random') ? seededShuffle(allFiles, seed || String(Date.now())) : allFiles;
+      const total = shuffled.length;
+      const files = shuffled.slice(offset, offset + limit);
+      const nextOffset = Math.min(total, offset + files.length);
+      const hasMore = nextOffset < total;
+
+      return res.json({ dir:'public', dirs:[], files, total, offset, limit, nextOffset, hasMore });
+    } catch (e) {
+      return res.status(500).json({ error: String(e) });
+    }
+  }
+
+  return res.status(400).json({ error:'public source not configured' });
 });
 
 // Avoid stale frontend on mobile/desktop browsers & reverse proxies

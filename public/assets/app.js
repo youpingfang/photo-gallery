@@ -105,14 +105,14 @@
 
   // source mode
   function getSourceMode(){
-    try { return (localStorage.getItem('gallery_source_mode') || 'auto').trim(); } catch { return 'auto'; }
+    try { return (localStorage.getItem('gallery_source_mode') || 'local').trim(); } catch { return 'local'; }
   }
   function isImmichMode(){
     const m = getSourceMode();
     return m === 'immich';
   }
   function setSourceMode(v){
-    try { localStorage.setItem('gallery_source_mode', String(v||'auto')); } catch {}
+    try { localStorage.setItem('gallery_source_mode', String(v||'local')); } catch {}
   }
 
   // immich
@@ -393,7 +393,7 @@
       const src = (window.__activeSource || 'local');
       let r2;
       if (src === 'public') {
-        r2 = await fetch('/api/public/images?offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+        r2 = await fetch('/api/public/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       } else if (src === 'immich') {
         const albumId = getImmichAlbumId();
         r2 = await apiFetch('/api/immich/images?albumId=' + encodeURIComponent(albumId) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
@@ -1018,21 +1018,30 @@
     if (!isAdminUnlocked()) {
       // allow saving non-admin options, but do not apply admin settings
     } else {
-      if ($('sourceMode')) setSourceMode($('sourceMode').value || 'auto');
+      if ($('sourceMode')) setSourceMode($('sourceMode').value || 'local');
 
       // immich
       if ($('immichAlbum')) setImmichAlbumId($('immichAlbum').value || '');
 
-      // If source is immich, persist as public album for all visitors
-      if (($('sourceMode')?.value || getSourceMode()) === 'immich') {
-        try {
+      // Persist as public source for all visitors
+      try {
+        const src = ($('sourceMode')?.value || getSourceMode() || 'local');
+        if (src === 'local') {
+          await apiFetch('/api/admin/public', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ source:'local' })
+          });
+        } else if (src === 'immich') {
           await apiFetch('/api/admin/public', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
             body: JSON.stringify({ source:'immich', immichAlbumId: getImmichAlbumId() })
           });
-        } catch {}
-      }
+        } else {
+          // WebDAV currently admin-only (not public). Keep selection for admin preview.
+        }
+      } catch {}
     }
 
     closeSettings();
@@ -1278,14 +1287,13 @@
       if (getAdminPass()) {
         if (mode === 'dav') active = 'dav';
         else if (mode === 'immich') active = 'immich';
-        else if (mode === 'local') active = 'local';
-        else active = 'auto';
+        else active = 'local';
       }
 
       // helper to fetch from a source
       const fetchSrc = async (src) => {
         if (src === 'public') {
-          const r = await fetch('/api/public/images?offset=0&limit=' + PAGE_SIZE + order);
+          const r = await fetch('/api/public/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
           const j = await r.json();
           j.__src = src;
           return j;
@@ -1305,34 +1313,13 @@
         return j;
       };
 
-      if (active === 'auto') {
-        // try local first
-        const j1 = await fetchSrc('local');
-        if ((j1.total || 0) > 0) {
-          data = j1;
-        } else {
-          if (!getAdminPass()) {
-            data = j1;
-          } else {
-            // try webdav then immich
-            let j2 = null;
-            try {
-              j2 = await fetchSrc('dav');
-              if (j2 && j2.error) j2 = null;
-            } catch { j2 = null; }
-            if (j2 && (j2.total || 0) > 0) data = j2;
-            else data = await fetchSrc('immich');
-          }
-        }
+      if ((active === 'dav' || active === 'immich') && !getAdminPass()) {
+        data = { error: '远程数据需要先在设置里解锁管理密码' };
       } else {
-        if ((active === 'dav' || active === 'immich') && !getAdminPass()) {
-          data = { error: '远程数据需要先在设置里解锁管理密码' };
-        } else {
-          data = await fetchSrc(active);
-        }
+        data = await fetchSrc(active);
       }
 
-      window.__activeSource = data.__src || (active === 'auto' ? 'local' : active);
+      window.__activeSource = data.__src || active;
     } catch (e) {
       console.error('load failed', e);
       $('content').innerHTML = '<div class="empty">加载失败（网络/脚本错误）。打开控制台看报错。</div>';
@@ -1340,6 +1327,37 @@
     }
     if (data.error){
       $('content').innerHTML = '<div class="empty">错误：' + esc(data.error) + '</div>';
+      return;
+    }
+
+    // Empty state hint for first-time visitors (no local images yet)
+    if (data.empty && !getAdminPass()) {
+      const hint = data.emptyHint || '暂无图片。';
+      $('content').innerHTML = '<div class="empty">' + esc(hint) + '<div style="margin-top:10px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
+        + '<button id="emptyOpenSettings" class="btnPrimary">打开设置</button>'
+        + '<button id="emptyUpload" class="btnGhost">上传图片</button>'
+        + '</div></div>';
+      try {
+        const b1 = document.getElementById('emptyOpenSettings');
+        if (b1) b1.onclick = () => openSettings();
+        const b2 = document.getElementById('emptyUpload');
+        if (b2) b2.onclick = () => { if (!isAdminUnlocked()) { alert('请先解锁管理密码'); openSettings(); return; } if ($('file')) $('file').click(); };
+      } catch {}
+      // still render dirs list so user can browse folders
+      currentFiles = [];
+      currentIndex = -1;
+      nextOffset = 0;
+      hasMore = false;
+      $('dirs').innerHTML = '';
+      if (data.dirs && data.dirs.length){
+        for (const d of data.dirs){
+          const el = document.createElement('div');
+          el.className = 'dir';
+          el.textContent = '📁 ' + d;
+          el.onclick = () => load(currentDir ? (currentDir + '/' + d) : d);
+          $('dirs').appendChild(el);
+        }
+      }
       return;
     }
 
