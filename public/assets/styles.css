@@ -300,6 +300,7 @@ body.immersive #apProg{ display:block; }
 /* lbMeta is rendered inside .thumbsBar now (see thumbsBar section) */
 
 /* settings card */
+.immichOnly{ display:none; }
 .lb-inner-settings{ width:min(560px, 96vw); max-width:96vw; height:auto; max-height: min(92vh, 720px); }
 #settings .settingsCard{ max-height: min(92vh, 720px); overflow:auto; -webkit-overflow-scrolling:touch;
   /* settings panel forced light theme */

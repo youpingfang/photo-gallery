@@ -110,30 +110,23 @@
   function getSourceMode(){
     try { return (localStorage.getItem('gallery_source_mode') || 'auto').trim(); } catch { return 'auto'; }
   }
+  function isImmichMode(){
+    const m = getSourceMode();
+    return m === 'immich';
+  }
   function setSourceMode(v){
     try { localStorage.setItem('gallery_source_mode', String(v||'auto')); } catch {}
   }
 
-  function getWebdavCfg(){
-    try {
-      return {
-        enabled: localStorage.getItem('gallery_webdav_enabled') === '1',
-        url: (localStorage.getItem('gallery_webdav_url') || '').trim(),
-        user: (localStorage.getItem('gallery_webdav_user') || '').trim(),
-        pass: (localStorage.getItem('gallery_webdav_pass') || '').trim(),
-      };
-    } catch {
-      return { enabled:false, url:'', user:'', pass:'' };
-    }
+  // immich
+  function getImmichAlbumId(){
+    try { return (localStorage.getItem('gallery_immich_album') || '').trim(); } catch { return ''; }
   }
-  function setWebdavCfg(cfg){
-    try {
-      localStorage.setItem('gallery_webdav_enabled', cfg.enabled ? '1' : '0');
-      localStorage.setItem('gallery_webdav_url', String(cfg.url||''));
-      localStorage.setItem('gallery_webdav_user', String(cfg.user||''));
-      localStorage.setItem('gallery_webdav_pass', String(cfg.pass||''));
-    } catch {}
+  function setImmichAlbumId(v){
+    try { localStorage.setItem('gallery_immich_album', String(v||'')); } catch {}
   }
+
+  // WebDAV config is server-side (env). Web UI no longer collects credentials.
 
   // likes
   const likes = new Map(); // name -> count (currentDir scoped)
@@ -385,8 +378,14 @@
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
 
       const src = (window.__activeSource || 'local');
-      const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
-      const r2 = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order, {}, { webdav: (src === 'dav') });
+      let r2;
+      if (src === 'immich') {
+        const albumId = getImmichAlbumId();
+        r2 = await apiFetch('/api/immich/images?albumId=' + encodeURIComponent(albumId) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+      } else {
+        const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
+        r2 = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+      }
       const d2 = await r2.json();
       if (d2.error) throw new Error(d2.error);
 
@@ -857,10 +856,21 @@
     });
     // show unlock section only when locked
     if ($('adminUnlock')) $('adminUnlock').style.display = unlocked ? 'none' : '';
+
+    // immichOnly rows only when unlocked + mode immich
+    const immichShow = unlocked && ($('sourceMode') ? ($('sourceMode').value === 'immich') : (getSourceMode() === 'immich'));
+    document.querySelectorAll('.immichOnly').forEach(el => {
+      el.style.display = immichShow ? '' : 'none';
+    });
   }
 
   function openSettings(){
     settings.classList.add('open');
+
+    // clear admin pass field on open (avoid iOS Keychain autofill confusion)
+    if ($('adminPass')) {
+      try { $('adminPass').value = ''; } catch {}
+    }
 
     // init token field
     if ($('uploadToken')) {
@@ -870,14 +880,25 @@
     // init webdav/source UI
     if ($('sourceMode')) {
       try { $('sourceMode').value = getSourceMode(); } catch {}
+      $('sourceMode').addEventListener('change', () => {
+        syncSettingsLockUI();
+        if ($('sourceMode').value === 'immich') {
+          loadImmichAlbums();
+        }
+      });
     }
-    const dav = getWebdavCfg();
-    if ($('webdavEnabled')) $('webdavEnabled').checked = !!dav.enabled;
-    if ($('webdavUrl')) $('webdavUrl').value = dav.url || '';
-    if ($('webdavUser')) $('webdavUser').value = dav.user || '';
-    if ($('webdavPass')) $('webdavPass').value = dav.pass || '';
+    // WebDAV credentials are server-side; no UI fields
+
+    // immich album
+    if ($('immichAlbum')) {
+      $('immichAlbum').value = getImmichAlbumId();
+      $('immichAlbum').addEventListener('change', () => setImmichAlbumId($('immichAlbum').value || ''));
+    }
 
     syncSettingsLockUI();
+    if (isAdminUnlocked() && ($('sourceMode')?.value === 'immich' || getSourceMode() === 'immich')) {
+      loadImmichAlbums();
+    }
     showFab();
   }
   function closeSettings(){ settings.classList.remove('open'); showFab(); }
@@ -895,12 +916,22 @@
     e.preventDefault();
     const p = ($('adminPass') ? $('adminPass').value : '').trim();
     if (!p) { alert('请输入管理员密码'); return; }
+    // Establish cookie session (img tags can't send custom headers)
+    try {
+      const r0 = await fetch('/api/admin/unlock', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ pass: p })
+      });
+      if (r0.status === 401) { alert('密码不正确'); return; }
+    } catch {}
+
     // best-effort verify by calling a protected endpoint
     try {
-      const r = await fetch('/api/dav/images?dir=&offset=0&limit=1', { headers: { 'x-admin-pass': p } });
-      // We accept 400 (missing webdav config) as "password ok".
+      const r = await fetch('/api/immich/albums', { headers: { 'x-admin-pass': p } });
       if (r.status === 401) { alert('密码不正确'); return; }
     } catch {}
+
     setAdminPass(p);
     syncSettingsLockUI();
   });
@@ -942,18 +973,14 @@
       try { localStorage.setItem('gallery_upload_token', String($('uploadToken').value || '').trim()); } catch {}
     }
 
-    // WebDAV + source mode (admin only)
+    // Remote sources (admin only)
     if (!isAdminUnlocked()) {
       // allow saving non-admin options, but do not apply admin settings
     } else {
       if ($('sourceMode')) setSourceMode($('sourceMode').value || 'auto');
-      const cfg = {
-        enabled: !!($('webdavEnabled') && $('webdavEnabled').checked),
-        url: ($('webdavUrl') ? $('webdavUrl').value : '').trim(),
-        user: ($('webdavUser') ? $('webdavUser').value : '').trim(),
-        pass: ($('webdavPass') ? $('webdavPass').value : '').trim(),
-      };
-      setWebdavCfg(cfg);
+
+      // immich
+      if ($('immichAlbum')) setImmichAlbumId($('immichAlbum').value || '');
     }
 
     closeSettings();
@@ -1126,19 +1153,36 @@
     else startAutoplay();
   });
 
+  async function loadImmichAlbums(){
+    if (!isAdminUnlocked()) return;
+    const sel = $('immichAlbum');
+    if (!sel) return;
+    try {
+      sel.innerHTML = '<option value="">加载中…</option>';
+      const r = await apiFetch('/api/immich/albums');
+      if (!r.ok) throw new Error('bad status');
+      const j = await r.json();
+      const albums = Array.isArray(j.albums) ? j.albums : [];
+      const cur = getImmichAlbumId();
+      const opts = ['<option value="">（全部相册）</option>'];
+      for (const a of albums) {
+        const name = String(a.name || 'Untitled');
+        const count = (a.count ?? 0);
+        opts.push(`<option value="${esc(a.id)}">${esc(name)}（${count}）</option>`);
+      }
+      sel.innerHTML = opts.join('');
+      if (cur) sel.value = cur;
+    } catch {
+      sel.innerHTML = '<option value="">（无法加载相册）</option>';
+    }
+  }
+
   async function apiFetch(url, opts = {}, extra = {}){
     const headers = Object.assign({}, (opts.headers || {}));
     const admin = getAdminPass();
     if (admin) headers['x-admin-pass'] = admin;
-    if (extra.webdav) {
-      const dav = getWebdavCfg();
-      if (dav && dav.url) {
-        headers['x-webdav-url'] = dav.url;
-        headers['x-webdav-user'] = dav.user || '';
-        headers['x-webdav-pass'] = dav.pass || '';
-      }
-    }
-    return fetch(url, Object.assign({}, opts, { headers }));
+    // webdav credentials are not sent from browser
+    return fetch(url, Object.assign({}, opts, { headers, credentials: 'same-origin' }));
   }
 
   // initial load
@@ -1160,16 +1204,24 @@
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
 
       const mode = getSourceMode();
-      const dav = getWebdavCfg();
 
       // decide active source
       let active = 'local';
       if (mode === 'dav') active = 'dav';
+      else if (mode === 'immich') active = 'immich';
       else if (mode === 'local') active = 'local';
       else active = 'auto';
 
       // helper to fetch from a source
       const fetchSrc = async (src) => {
+        if (src === 'immich') {
+          const albumId = getImmichAlbumId();
+          const base = '/api/immich/images';
+          const r = await apiFetch(base + '?albumId=' + encodeURIComponent(albumId) + '&offset=0&limit=' + PAGE_SIZE + order);
+          const j = await r.json();
+          j.__src = src;
+          return j;
+        }
         const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
         const r = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order, {}, { webdav: (src === 'dav') });
         const j = await r.json();
@@ -1183,19 +1235,21 @@
         if ((j1.total || 0) > 0) {
           data = j1;
         } else {
-          if (!dav.enabled || !dav.url) {
-            data = j1;
-          } else if (!getAdminPass()) {
+          if (!getAdminPass()) {
             data = j1;
           } else {
-            const j2 = await fetchSrc('dav');
-            data = j2;
+            // try webdav then immich
+            let j2 = null;
+            try {
+              j2 = await fetchSrc('dav');
+              if (j2 && j2.error) j2 = null;
+            } catch { j2 = null; }
+            if (j2 && (j2.total || 0) > 0) data = j2;
+            else data = await fetchSrc('immich');
           }
         }
       } else {
-        if (active === 'dav' && (!dav.enabled || !dav.url)) {
-          data = { error: 'WebDAV 未启用或未配置' };
-        } else if (active === 'dav' && !getAdminPass()) {
+        if ((active === 'dav' || active === 'immich') && !getAdminPass()) {
           data = { error: '远程数据需要先在设置里解锁管理密码' };
         } else {
           data = await fetchSrc(active);

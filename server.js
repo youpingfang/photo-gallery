@@ -7,12 +7,14 @@ import sharp from 'sharp';
 import exifr from 'exifr';
 import { createClient } from 'redis';
 import crypto from 'crypto';
+import { Readable } from 'node:stream';
 import { XMLParser } from 'fast-xml-parser';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 const IMAGES_DIR = process.env.IMAGES_DIR || '/images';
@@ -99,17 +101,66 @@ function seededShuffle(arr, seedStr){
 
 // 测试模式：不设置 token 时允许删除（不安全）。生产环境强烈建议设置 UPLOAD_TOKEN。
 
-function requireAdmin(req, res){
-  if (!ADMIN_PASS) return true;
-  const p = (req.headers['x-admin-pass'] || '').toString();
-  if (p !== ADMIN_PASS) {
-    res.status(401).json({ error: 'admin required' });
+function parseCookies(req){
+  const h = (req.headers['cookie'] || '').toString();
+  const out = {};
+  if (!h) return out;
+  for (const part of h.split(';')) {
+    const [k, ...rest] = part.split('=');
+    const key = (k || '').trim();
+    if (!key) continue;
+    out[key] = decodeURIComponent(rest.join('=').trim());
+  }
+  return out;
+}
+
+function signAdminToken(ts){
+  const mac = crypto.createHmac('sha256', ADMIN_PASS);
+  mac.update(String(ts));
+  return mac.digest('hex');
+}
+
+function verifyAdminToken(token){
+  try {
+    const raw = Buffer.from(String(token), 'base64').toString('utf8');
+    const [tsStr, sig] = raw.split('.', 2);
+    const ts = parseInt(tsStr, 10);
+    if (!ts || !sig) return false;
+    // 30 days
+    if (Date.now() - ts > 30*24*3600*1000) return false;
+    const expected = signAdminToken(ts);
+    return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig));
+  } catch {
     return false;
   }
-  return true;
+}
+
+function requireAdmin(req, res){
+  if (!ADMIN_PASS) return true;
+
+  // header (legacy)
+  const p = (req.headers['x-admin-pass'] || '').toString();
+  if (p === ADMIN_PASS) return true;
+
+  // cookie session
+  const cookies = parseCookies(req);
+  const tok = cookies['gallery_admin'] || '';
+  if (tok && verifyAdminToken(tok)) return true;
+
+  res.status(401).json({ error: 'admin required' });
+  return false;
 }
 
 function getWebdavCfg(req){
+  // Prefer server env config; fall back to request headers (legacy)
+  const envUrl = (process.env.WEBDAV_URL || '').toString();
+  const envUser = (process.env.WEBDAV_USER || '').toString();
+  const envPass = (process.env.WEBDAV_PASS || '').toString();
+  const envEnabled = (process.env.WEBDAV_ENABLED || '').toString();
+
+  const url0 = (envEnabled === '0') ? '' : envUrl;
+  if (url0) return { url: url0, user: envUser, pass: envPass };
+
   const url = (req.headers['x-webdav-url'] || '').toString();
   const user = (req.headers['x-webdav-user'] || '').toString();
   const pass = (req.headers['x-webdav-pass'] || '').toString();
@@ -446,6 +497,142 @@ app.post('/api/like', express.json({ limit: '16kb' }), (req, res) => {
   res.json({ ok:true, name, count: store[id] });
 });
 
+// --- Immich endpoints (proxy; requires ADMIN_PASS) ---
+const IMMICH_URL = process.env.IMMICH_URL || '';
+const IMMICH_API_KEY = process.env.IMMICH_API_KEY || '';
+
+function immichCfgOk(){
+  return !!(IMMICH_URL && IMMICH_API_KEY);
+}
+function immichHeaders(){
+  return {
+    'x-api-key': IMMICH_API_KEY,
+    'Accept': 'application/json'
+  };
+}
+
+async function immichJson(path){
+  const url = IMMICH_URL.replace(/\/+$/,'') + path;
+  const r = await fetch(url, { headers: immichHeaders() });
+  if (!r.ok) throw new Error('immich ' + path + ' failed: ' + r.status);
+  return r.json();
+}
+
+async function immichStreamAny(res, candidates){
+  // candidates: [{path, accept}]
+  for (const c of candidates) {
+    const url = IMMICH_URL.replace(/\/+$/,'') + c.path;
+    const headers = Object.assign({}, immichHeaders());
+    if (c.accept) headers['Accept'] = c.accept;
+    const r = await fetch(url, { method:'GET', headers });
+    if (!r.ok) continue;
+    const ct = r.headers.get('content-type');
+    if (ct) res.setHeader('Content-Type', ct);
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return Readable.fromWeb(r.body).pipe(res);
+  }
+  res.status(502).end();
+}
+
+app.get('/api/immich/albums', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+  try {
+    const albums = await immichJson('/api/albums');
+    const list = (Array.isArray(albums) ? albums : []).map(a => ({
+      id: a.id,
+      name: (a.albumName || a.name || '').trim() || '未命名相册',
+      count: a.assetCount ?? a.assets?.length ?? 0,
+      thumbnailAssetId: a.albumThumbnailAssetId || a.thumbnailAssetId,
+    }));
+    list.sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+    res.json({ ok:true, albums:list });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get('/api/immich/images', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+
+  const albumId = (req.query.albumId || '').toString();
+  const offset = Math.max(0, parseInt((req.query.offset ?? '0').toString(), 10) || 0);
+  const limitRaw = parseInt((req.query.limit ?? '120').toString(), 10) || 120;
+  const limit = Math.max(1, Math.min(500, limitRaw));
+  const order = (req.query.order || '').toString();
+  const seed = (req.query.seed || '').toString();
+
+  try {
+    // If no album specified, return albums as "dirs" (display as name (count))
+    if (!albumId) {
+      const albums = await immichJson('/api/albums');
+      const list = (Array.isArray(albums) ? albums : []).map(a => ({
+        id: a.id,
+        name: (a.albumName || a.name || '').trim() || '未命名相册',
+        count: a.assetCount ?? a.assets?.length ?? 0,
+      }));
+      list.sort((x,y)=>String(x.name).localeCompare(String(y.name)));
+      const dirs = list.map(a => `${a.name} (${a.count})|${a.id}`);
+      return res.json({ dir:'', dirs, files:[], total:0, offset:0, limit, nextOffset:0, hasMore:false });
+    }
+
+    // Album detail -> assets
+    const album = await immichJson('/api/albums/' + encodeURIComponent(albumId));
+    const assets = Array.isArray(album?.assets) ? album.assets : (Array.isArray(album?.asset) ? album.asset : []);
+
+    // Only include images for now (avoid video playback/huge downloads)
+    const allFiles = assets
+      .filter(a => (a?.type || '').toString().toUpperCase() === 'IMAGE')
+      .map(a => {
+        const id = a.id || a.assetId;
+        return {
+          name: String(id),
+          url: `/api/immich/file?id=${encodeURIComponent(String(id))}`,
+          thumbUrl: `/api/immich/thumb?id=${encodeURIComponent(String(id))}`,
+        };
+      })
+      .filter(f => f.name && f.name !== 'undefined');
+
+    const baseAll = allFiles;
+    const shuffled = (order === 'random') ? seededShuffle(baseAll, seed || String(Date.now())) : baseAll;
+
+    const total = shuffled.length;
+    const files = shuffled.slice(offset, offset + limit);
+    const nextOffset = Math.min(total, offset + files.length);
+    const hasMore = nextOffset < total;
+
+    res.json({ dir: 'album:' + albumId, dirs: [], files, total, offset, limit, nextOffset, hasMore });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+app.get('/api/immich/thumb', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+  const id = (req.query.id || '').toString();
+  if (!id) return res.status(400).json({ error:'missing id' });
+  // try common Immich thumbnail endpoints
+  return immichStreamAny(res, [
+    { path: `/api/assets/${encodeURIComponent(id)}/thumbnail`, accept:'image/*' },
+    { path: `/api/assets/${encodeURIComponent(id)}/thumbnail?size=thumbnail`, accept:'image/*' },
+    { path: `/api/asset/thumbnail/${encodeURIComponent(id)}`, accept:'image/*' },
+  ]);
+});
+
+app.get('/api/immich/file', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+  const id = (req.query.id || '').toString();
+  if (!id) return res.status(400).json({ error:'missing id' });
+  return immichStreamAny(res, [
+    { path: `/api/assets/${encodeURIComponent(id)}/original`, accept:'*/*' },
+    { path: `/api/assets/${encodeURIComponent(id)}/download`, accept:'*/*' },
+    { path: `/api/asset/file/${encodeURIComponent(id)}`, accept:'*/*' },
+  ]);
+});
+
 // --- WebDAV endpoints (proxy; requires ADMIN_PASS) ---
 app.get('/api/dav/images', async (req, res) => {
   if (!requireAdmin(req, res)) return;
@@ -546,7 +733,7 @@ app.get('/api/dav/file', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
     const ct = r.headers.get('content-type');
     if (ct) res.setHeader('Content-Type', ct);
-    r.body.pipe(res);
+    Readable.fromWeb(r.body).pipe(res);
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }
@@ -749,6 +936,29 @@ function getBuildId(){
 
 app.get('/api/config', (req, res) => {
   res.json({ buildId: getBuildId(), autoplayMs: 3000 });
+});
+
+// admin unlock -> sets HttpOnly cookie for image requests (img tags can't send headers)
+app.post('/api/admin/unlock', express.json({ limit:'50kb' }), (req, res) => {
+  if (!ADMIN_PASS) return res.json({ ok:true, mode:'disabled' });
+  const pass = (req.body?.pass || '').toString();
+  if (pass !== ADMIN_PASS) return res.status(401).json({ error:'bad password' });
+
+  const ts = Date.now();
+  const sig = signAdminToken(ts);
+  const token = Buffer.from(`${ts}.${sig}`, 'utf8').toString('base64');
+
+  // Domain is HTTPS-only (per deployment). Force Secure to satisfy iOS Safari.
+  const parts = [
+    `gallery_admin=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    'Secure',
+    `Max-Age=${30*24*3600}`,
+  ];
+  res.setHeader('Set-Cookie', parts.join('; '));
+  res.json({ ok:true });
 });
 
 // Avoid stale frontend on mobile/desktop browsers & reverse proxies
