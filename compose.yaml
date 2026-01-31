@@ -23,7 +23,7 @@ services:
       - WEBDAV_USER=${WEBDAV_USER}
       - WEBDAV_PASS=${WEBDAV_PASS}
 
-      # 公共相册配置文件（默认写入 /images/.gallery_config.json）
+      # 公共相册配置文件（建议写入独立持久化目录 /data）
       - GALLERY_CONFIG_PATH=${GALLERY_CONFIG_PATH}
 
       # 缩略图参数（可选）
@@ -31,6 +31,8 @@ services:
       - THUMB_QUALITY=${THUMB_QUALITY}
 
     volumes:
-      # 把宿主机图片目录挂载到容器 /images（需要写入所以不能 ro）
+      # 把宿主机图片目录挂载到容器 /images
       - "${IMAGE_DIR_HOST}:/images"
+      # 把宿主机数据目录挂载到容器 /data（用于保存公开相册配置等）
+      - "${DATA_DIR_HOST}:/data"
     restart: unless-stopped
