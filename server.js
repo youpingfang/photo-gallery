@@ -151,51 +151,7 @@ function requireAdmin(req, res){
   return false;
 }
 
-function getWebdavCfg(req){
-  // Prefer server env config; fall back to request headers (legacy)
-  const envUrl = (process.env.WEBDAV_URL || '').toString();
-  const envUser = (process.env.WEBDAV_USER || '').toString();
-  const envPass = (process.env.WEBDAV_PASS || '').toString();
-  const envEnabled = (process.env.WEBDAV_ENABLED || '').toString();
-
-  const url0 = (envEnabled === '0') ? '' : envUrl;
-  if (url0) return { url: url0, user: envUser, pass: envPass };
-
-  const url = (req.headers['x-webdav-url'] || '').toString();
-  const user = (req.headers['x-webdav-user'] || '').toString();
-  const pass = (req.headers['x-webdav-pass'] || '').toString();
-  if (!url) return null;
-  return { url, user, pass };
-}
-
-function joinDavUrl(base, subPath){
-  const b = base.endsWith('/') ? base : (base + '/');
-  const p = (subPath || '').replace(/^\/+/, '');
-  return b + p;
-}
-
-function basicAuthHeader(user, pass){
-  if (!user && !pass) return null;
-  const tok = Buffer.from(String(user) + ':' + String(pass)).toString('base64');
-  return 'Basic ' + tok;
-}
-
-const xmlParser = new XMLParser({
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_'
-});
-
-function isImageName(name){
-  return isImageFile(name);
-}
-
-function davThumbCachePath(cfg, subdir, name){
-  // keep dav thumbs under IMAGES_DIR so docker volume can persist
-  const h = crypto.createHash('sha1').update(cfg.url + '|' + subdir + '|' + name + '|' + THUMB_WIDTH + '|' + THUMB_QUALITY).digest('hex');
-  const dir = path.join(IMAGES_DIR, '.thumbs_dav');
-  const outAbs = path.join(dir, h + '.webp');
-  return { dir, outAbs };
-}
+// WebDAV feature removed
 
 const THUMBS_SUBDIR = '.thumbs';
 const THUMB_WIDTH = parseInt(process.env.THUMB_WIDTH || '480', 10) || 480;
@@ -638,205 +594,7 @@ app.get('/api/immich/file', async (req, res) => {
   ]);
 });
 
-// --- WebDAV endpoints (proxy; requires ADMIN_PASS) ---
-app.get('/api/dav/images', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const cfg = getWebdavCfg(req);
-  if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-
-  const subdir = (req.query.dir || '').toString();
-  const offset = Math.max(0, parseInt((req.query.offset ?? '0').toString(), 10) || 0);
-  const limitRaw = parseInt((req.query.limit ?? '120').toString(), 10) || 120;
-  const limit = Math.max(1, Math.min(500, limitRaw));
-
-  const order = (req.query.order || '').toString();
-  const seed = (req.query.seed || '').toString();
-
-  try {
-    const url = joinDavUrl(cfg.url, subdir);
-    const headers = {
-      'Depth': '1',
-      'Content-Type': 'application/xml; charset=utf-8'
-    };
-    const auth = basicAuthHeader(cfg.user, cfg.pass);
-    if (auth) headers['Authorization'] = auth;
-
-    const body = '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>';
-    const r = await fetch(url, { method:'PROPFIND', headers, body });
-    if (!r.ok) return res.status(502).json({ error: 'webdav propfind failed: ' + r.status });
-
-    const text = await r.text();
-    const doc = xmlParser.parse(text);
-    const resp = doc['d:multistatus']?.['d:response'] || doc['multistatus']?.['response'] || [];
-    const arr = Array.isArray(resp) ? resp : [resp];
-
-    const dirs = [];
-    const allFiles = [];
-
-    for (const it of arr) {
-      const href = it['d:href'] || it['href'] || '';
-      const propstat = it['d:propstat'] || it['propstat'];
-      const prop = Array.isArray(propstat) ? (propstat[0]?.['d:prop'] || propstat[0]?.['prop']) : (propstat?.['d:prop'] || propstat?.['prop']);
-      const rt = prop?.['d:resourcetype'] || prop?.['resourcetype'];
-      const isDir = !!(rt && (rt['d:collection'] != null || rt['collection'] != null));
-
-      // Derive name from href
-      let name = '';
-      try {
-        const u = new URL(href, cfg.url);
-        const parts = u.pathname.split('/').filter(Boolean);
-        name = decodeURIComponent(parts[parts.length-1] || '');
-      } catch {}
-
-      // Skip the directory itself (PROPFIND includes it)
-      if (!name) continue;
-
-      if (isDir) {
-        dirs.push(name);
-      } else if (isImageName(name)) {
-        allFiles.push({
-          name,
-          url: `/api/dav/file?dir=${encodeURIComponent(subdir)}&name=${encodeURIComponent(name)}`,
-          thumbUrl: `/api/dav/thumb?dir=${encodeURIComponent(subdir)}&name=${encodeURIComponent(name)}`,
-        });
-      }
-    }
-
-    dirs.sort((a,b)=>a.localeCompare(b));
-    allFiles.sort((a,b)=>a.name.localeCompare(b));
-
-    const baseAll = allFiles;
-    const shuffled = (order === 'random') ? seededShuffle(baseAll, seed || String(Date.now())) : baseAll;
-
-    const total = shuffled.length;
-    const files = shuffled.slice(offset, offset + limit);
-    const nextOffset = Math.min(total, offset + files.length);
-    const hasMore = nextOffset < total;
-
-    res.json({ dir: subdir, dirs, files, total, offset, limit, nextOffset, hasMore });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.get('/api/dav/file', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const cfg = getWebdavCfg(req);
-  if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-  const subdir = (req.query.dir || '').toString();
-  const name = (req.query.name || '').toString();
-  if (!name) return res.status(400).json({ error: 'bad name' });
-
-  try {
-    const url = joinDavUrl(cfg.url, (subdir ? (subdir + '/') : '') + name);
-    const headers = {};
-    const auth = basicAuthHeader(cfg.user, cfg.pass);
-    if (auth) headers['Authorization'] = auth;
-    const r = await fetch(url, { method:'GET', headers });
-    if (!r.ok) return res.status(502).end();
-
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    const ct = r.headers.get('content-type');
-    if (ct) res.setHeader('Content-Type', ct);
-    Readable.fromWeb(r.body).pipe(res);
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.get('/api/dav/thumb', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const cfg = getWebdavCfg(req);
-  if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-  const subdir = (req.query.dir || '').toString();
-  const name = (req.query.name || '').toString();
-  if (!name) return res.status(400).json({ error: 'bad name' });
-
-  try {
-    const { dir, outAbs } = davThumbCachePath(cfg, subdir, name);
-    try {
-      const st = fs.statSync(outAbs);
-      if (st.isFile() && st.size > 0) {
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        return res.sendFile(outAbs);
-      }
-    } catch {}
-
-    fs.mkdirSync(dir, { recursive:true });
-
-    const url = joinDavUrl(cfg.url, (subdir ? (subdir + '/') : '') + name);
-    const headers = {};
-    const auth = basicAuthHeader(cfg.user, cfg.pass);
-    if (auth) headers['Authorization'] = auth;
-    const r = await fetch(url, { method:'GET', headers });
-    if (!r.ok) return res.status(502).end();
-
-    const buf = Buffer.from(await r.arrayBuffer());
-    await sharp(buf)
-      .rotate()
-      .resize({ width: THUMB_WIDTH, withoutEnlargement:true })
-      .webp({ quality: THUMB_QUALITY })
-      .toFile(outAbs);
-
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    return res.sendFile(outAbs);
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.post('/api/dav/upload', upload.array('files', 50), async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const cfg = getWebdavCfg(req);
-  if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-
-  const subdir = (req.query.dir || '').toString();
-  const auth = basicAuthHeader(cfg.user, cfg.pass);
-
-  try {
-    const uploaded = [];
-    for (const f of (req.files || [])) {
-      const localPath = f.path;
-      const data = fs.readFileSync(localPath);
-      const url = joinDavUrl(cfg.url, (subdir ? (subdir + '/') : '') + f.filename);
-      const headers = {};
-      if (auth) headers['Authorization'] = auth;
-      const r = await fetch(url, { method:'PUT', headers, body: data });
-      if (!r.ok) throw new Error('webdav put failed: ' + r.status);
-      uploaded.push({ name: f.filename, size: f.size });
-    }
-    res.json({ ok:true, uploaded: uploaded.length, files: uploaded });
-  } catch (e) {
-    res.status(500).json({ error: String(e) });
-  }
-});
-
-app.post('/api/dav/delete', express.json({ limit:'1mb' }), async (req, res) => {
-  if (!requireAdmin(req, res)) return;
-  const cfg = getWebdavCfg(req);
-  if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-
-  const subdir = ((req.body?.dir ?? req.query?.dir) || '').toString();
-  const names = Array.isArray(req.body?.names) ? req.body.names.map(String) : [];
-  const auth = basicAuthHeader(cfg.user, cfg.pass);
-
-  const deleted = [];
-  const failed = [];
-  for (const name of names) {
-    try {
-      const url = joinDavUrl(cfg.url, (subdir ? (subdir + '/') : '') + name);
-      const headers = {};
-      if (auth) headers['Authorization'] = auth;
-      const r = await fetch(url, { method:'DELETE', headers });
-      if (!r.ok) throw new Error('webdav delete failed: ' + r.status);
-      deleted.push(name);
-    } catch (e) {
-      failed.push({ name, error: String(e) });
-    }
-  }
-
-  res.json({ ok:true, deleted, failed });
-});
+// --- WebDAV endpoints removed ---
 
 app.get('/api/meta', async (req, res) => {
   const subdir = (req.query.dir || '').toString();
@@ -959,19 +717,25 @@ app.post('/api/admin/unlock', express.json({ limit:'50kb' }), (req, res) => {
   res.json({ ok:true });
 });
 
-// Admin: set public album (for everyone)
+// Admin: set public library (for everyone)
 app.post('/api/admin/public', express.json({ limit:'50kb' }), (req, res) => {
   if (!requireAdmin(req, res)) return;
   const source = (req.body?.source || '').toString();
   const immichAlbumId = (req.body?.immichAlbumId || '').toString();
+  const likeEnabledRaw = req.body?.likeEnabled;
 
   const cfg = loadGalleryCfg();
+
+  // likeEnabled: admin-controlled global toggle (default: off)
+  if (typeof likeEnabledRaw === 'boolean') {
+    cfg.likeEnabled = likeEnabledRaw;
+  }
 
   if (source === 'local') {
     cfg.publicSource = 'local';
     cfg.immichAlbumId = '';
     saveGalleryCfg(cfg);
-    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId, likeEnabled: !!cfg.likeEnabled });
   }
 
   if (source === 'immich') {
@@ -979,7 +743,13 @@ app.post('/api/admin/public', express.json({ limit:'50kb' }), (req, res) => {
     cfg.publicSource = 'immich';
     cfg.immichAlbumId = immichAlbumId;
     saveGalleryCfg(cfg);
-    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+    return res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId, likeEnabled: !!cfg.likeEnabled });
+  }
+
+  // Allow updating likeEnabled without changing source
+  if (!source) {
+    saveGalleryCfg(cfg);
+    return res.json({ ok:true, publicSource: cfg.publicSource || 'local', immichAlbumId: cfg.immichAlbumId || '', likeEnabled: !!cfg.likeEnabled });
   }
 
   return res.status(400).json({ error:'unsupported source' });
@@ -989,7 +759,8 @@ app.get('/api/public', (req, res) => {
   const cfg = loadGalleryCfg();
   res.json({
     publicSource: cfg.publicSource || 'local',
-    immichAlbumId: cfg.immichAlbumId || ''
+    immichAlbumId: cfg.immichAlbumId || '',
+    likeEnabled: !!cfg.likeEnabled
   });
 });
 

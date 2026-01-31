@@ -17,11 +17,7 @@ services:
       - IMMICH_URL=${IMMICH_URL}
       - IMMICH_API_KEY=${IMMICH_API_KEY}
 
-      # WebDAV（可选；连接信息在服务端 env 配置）
-      - WEBDAV_ENABLED=${WEBDAV_ENABLED}
-      - WEBDAV_URL=${WEBDAV_URL}
-      - WEBDAV_USER=${WEBDAV_USER}
-      - WEBDAV_PASS=${WEBDAV_PASS}
+      # WebDAV 已移除
 
       # 公共相册配置文件（建议写入独立持久化目录 /data）
       - GALLERY_CONFIG_PATH=${GALLERY_CONFIG_PATH}

@@ -115,14 +115,14 @@
             <select id="sourceMode" class="sel" style="width:180px;">
               <option value="local">本地（/images）</option>
               <option value="immich">Immich 相册</option>
-              <option value="dav">WebDAV（仅管理员）</option>
+<!-- WebDAV removed -->
             </select>
           </div>
           <div class="setRow">
             <div class="setLabel">说明</div>
             <div class="setHelp">访客无需密码，进入后看到的就是你在这里“保存并应用”的数据源（以最后一次保存为准）。</div>
           </div>
-          <!-- WebDAV 连接信息由服务端环境变量配置（不在 Web 端填写） -->
+<!-- WebDAV removed -->
           <div class="setRow immichOnly">
             <div class="setLabel">相册</div>
             <select id="immichAlbum" class="sel" style="width:260px;">
@@ -176,7 +176,7 @@
 
         <!-- 拍摄信息功能已移除 -->
 
-        <div class="setSection">
+        <div class="setSection adminOnly">
           <div class="setTitle">管理</div>
           <div class="setRow">
             <div class="setLabel">管理密码</div>

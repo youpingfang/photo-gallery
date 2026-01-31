@@ -123,14 +123,12 @@
     try { localStorage.setItem('gallery_immich_album', String(v||'')); } catch {}
   }
 
-  // WebDAV config is server-side (env). Web UI no longer collects credentials.
+  // WebDAV removed
 
-  // likes
-  let likeEnabled = true;
-  try { likeEnabled = (localStorage.getItem('gallery_like') !== '0'); } catch {}
+  // likes (admin-controlled global toggle)
+  let likeEnabled = false; // default off
   function setLikeEnabled(on){
     likeEnabled = !!on;
-    try { localStorage.setItem('gallery_like', likeEnabled ? '1' : '0'); } catch {}
     if ($('likeToggle')) $('likeToggle').textContent = '小红心：' + (likeEnabled ? '开' : '关');
     // update UI immediately
     document.body.classList.toggle('likeOff', !likeEnabled);
@@ -398,8 +396,7 @@
         const albumId = getImmichAlbumId();
         r2 = await apiFetch('/api/immich/images?albumId=' + encodeURIComponent(albumId) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       } else {
-        const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
-        r2 = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+        r2 = await apiFetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       }
       const d2 = await r2.json();
       if (d2.error) throw new Error(d2.error);
@@ -915,7 +912,7 @@
     // init token field (force empty each time; user must re-enter for upload/delete)
     // uploadToken removed
 
-    // init webdav/source UI
+    // init source UI
     if ($('sourceMode')) {
       try { $('sourceMode').value = getSourceMode(); } catch {}
       $('sourceMode').addEventListener('change', () => {
@@ -925,7 +922,7 @@
         }
       });
     }
-    // WebDAV credentials are server-side; no UI fields
+    // (WebDAV removed)
 
     // immich album
     if ($('immichAlbum')) {
@@ -1023,23 +1020,21 @@
       // immich
       if ($('immichAlbum')) setImmichAlbumId($('immichAlbum').value || '');
 
-      // Persist as public source for all visitors
+      // Persist as public source + global toggles for all visitors
       try {
         const src = ($('sourceMode')?.value || getSourceMode() || 'local');
         if (src === 'local') {
           await apiFetch('/api/admin/public', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ source:'local' })
+            body: JSON.stringify({ source:'local', likeEnabled })
           });
         } else if (src === 'immich') {
           await apiFetch('/api/admin/public', {
             method:'POST',
             headers:{ 'Content-Type':'application/json' },
-            body: JSON.stringify({ source:'immich', immichAlbumId: getImmichAlbumId() })
+            body: JSON.stringify({ source:'immich', immichAlbumId: getImmichAlbumId(), likeEnabled })
           });
-        } else {
-          // WebDAV currently admin-only (not public). Keep selection for admin preview.
         }
       } catch {}
     }
@@ -1052,6 +1047,7 @@
   setLikeEnabled(likeEnabled);
   on('likeToggle','click', (e) => {
     e.preventDefault();
+    if (!isAdminUnlocked()) { alert('请先解锁管理密码'); openSettings(); return; }
     setLikeEnabled(!likeEnabled);
     // re-render current view to remove/add overlays
     load(currentDir);
@@ -1173,8 +1169,7 @@
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
     const headers = { 'Content-Type':'application/json' };
-    const src = (window.__activeSource || 'local');
-    const url = (src === 'dav') ? ('/api/dav/delete?dir=' + encodeURIComponent(currentDir)) : ('/api/delete?dir=' + encodeURIComponent(currentDir));
+    const url = '/api/delete?dir=' + encodeURIComponent(currentDir);
     const r = await apiFetch(url, {
       method:'POST',
       headers,
@@ -1197,8 +1192,7 @@
     for (const f of files) fd.append('files', f, f.name);
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
-    const src = (window.__activeSource || 'local');
-    const url = (src === 'dav') ? ('/api/dav/upload?dir=' + encodeURIComponent(currentDir)) : ('/api/upload?dir=' + encodeURIComponent(currentDir));
+    const url = '/api/upload?dir=' + encodeURIComponent(currentDir);
     await apiFetch(url, {
       method:'POST',
       body: fd
@@ -1261,6 +1255,17 @@
     return fetch(url, Object.assign({}, opts, { headers, credentials: 'same-origin' }));
   }
 
+  async function fetchPublicCfg(){
+    try {
+      const r = await fetch('/api/public', { credentials:'same-origin' });
+      const j = await r.json();
+      if (j && typeof j.likeEnabled === 'boolean') setLikeEnabled(j.likeEnabled);
+      return j || {};
+    } catch {
+      return {};
+    }
+  }
+
   // initial load
   async function load(dir){
     // Tear down previous bubble simulation / observers to avoid leaks when switching dirs/modes.
@@ -1276,6 +1281,8 @@
 
     let data;
     try {
+      // Keep global switches (like button) in sync across devices
+      await fetchPublicCfg();
       const seed = (viewMode === 'masonry') ? String(Date.now()) : '';
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
 
@@ -1285,8 +1292,7 @@
       // If not admin-unlocked, always use the public feed (no password required for visitors)
       let active = (!getAdminPass()) ? 'public' : 'local';
       if (getAdminPass()) {
-        if (mode === 'dav') active = 'dav';
-        else if (mode === 'immich') active = 'immich';
+        if (mode === 'immich') active = 'immich';
         else active = 'local';
       }
 
@@ -1306,14 +1312,13 @@
           j.__src = src;
           return j;
         }
-        const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
-        const r = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
+        const r = await apiFetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
         const j = await r.json();
         j.__src = src;
         return j;
       };
 
-      if ((active === 'dav' || active === 'immich') && !getAdminPass()) {
+      if ((active === 'immich') && !getAdminPass()) {
         data = { error: '远程数据需要先在设置里解锁管理密码' };
       } else {
         data = await fetchSrc(active);
