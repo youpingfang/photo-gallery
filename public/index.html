@@ -39,7 +39,7 @@
     <button id="modeQuick" title="切换模式" aria-label="切换模式">模式</button>
     <button id="settingsBtn" title="配置" aria-label="配置">⚙︎</button>
     <button id="uploadBtn" title="上传" aria-label="上传">⬆︎</button>
-    <button id="detailBtn" title="细节（铺满/缩略图隐藏）" aria-label="细节">🔍</button>
+    <!-- detail button moved into lightbox -->
     <button id="playPref" title="自动播放" aria-label="自动播放">▶</button>
   </div>
 
@@ -68,6 +68,7 @@
           <button id="lbX" aria-label="关闭" class="lbX">✕</button>
           <button id="lbPrev" aria-label="上一张" class="lbPrev">‹</button>
           <button id="lbNext" aria-label="下一张" class="lbNext">›</button>
+          <button id="lbDetailBtn" aria-label="细节" class="lbDetailBtn" title="细节（铺满/缩略图隐藏）">🔍</button>
           <div id="hintSwipe" class="hint" style="left:50%;top:14px;transform:translate(-50%,6px);">左右滑动切换 · 双击/双指放大</div>
           <div id="hintThumbs" class="hint" style="left:50%;bottom:78px;transform:translate(-50%,6px);">底部滑动选图</div>
         </div>
@@ -175,8 +176,12 @@
         <div class="setSection">
           <div class="setTitle">管理</div>
           <div class="setRow">
-            <div class="setLabel">口令</div>
-            <input id="uploadToken" type="password" placeholder="UPLOAD_TOKEN（可留空）" style="width:180px;min-width:180px;" />
+            <div class="setLabel">上传/删除口令</div>
+            <input id="uploadToken" type="password" placeholder="仅用于上传/删除；浏览无需填写" autocomplete="new-password" autocapitalize="off" spellcheck="false" style="width:180px;min-width:180px;" />
+          </div>
+          <div class="setRow">
+            <div class="setLabel">小红心</div>
+            <button id="likeToggle" class="btnGhost">小红心：开</button>
           </div>
           <!-- 上传按钮已移到右下角浮动按钮，设置里不再重复 -->
           <div class="setRow">

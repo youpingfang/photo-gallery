@@ -93,9 +93,12 @@
   let selectMode = false;
   const selected = new Set();
 
-  // upload/delete token (client-side)
+  // upload/delete token (session-only; user re-enters each time)
   function getUploadToken(){
-    try { return (localStorage.getItem('gallery_upload_token') || '').trim(); } catch { return ''; }
+    try { return (sessionStorage.getItem('gallery_upload_token') || '').trim(); } catch { return ''; }
+  }
+  function setUploadToken(v){
+    try { sessionStorage.setItem('gallery_upload_token', String(v||'').trim()); } catch {}
   }
 
   // admin pass (session-scoped)
@@ -129,6 +132,16 @@
   // WebDAV config is server-side (env). Web UI no longer collects credentials.
 
   // likes
+  let likeEnabled = true;
+  try { likeEnabled = (localStorage.getItem('gallery_like') !== '0'); } catch {}
+  function setLikeEnabled(on){
+    likeEnabled = !!on;
+    try { localStorage.setItem('gallery_like', likeEnabled ? '1' : '0'); } catch {}
+    if ($('likeToggle')) $('likeToggle').textContent = '小红心：' + (likeEnabled ? '开' : '关');
+    // update UI immediately
+    document.body.classList.toggle('likeOff', !likeEnabled);
+  }
+
   const likes = new Map(); // name -> count (currentDir scoped)
   function likeKey(name){ return (currentDir || '') + '|' + String(name || ''); }
   function isLiked(name){
@@ -147,6 +160,7 @@
     btn.classList.toggle('liked', isLiked(name));
   }
   async function fetchLikesFor(names){
+    if (!likeEnabled) return;
     try {
       const q = names.map(encodeURIComponent).join(',');
       const r = await fetch('/api/likes?dir=' + encodeURIComponent(currentDir || '') + '&names=' + q);
@@ -326,6 +340,7 @@
       likeBtn.addEventListener('click', async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (!likeEnabled) return;
         if (isLiked(f.name)) return;
         try {
           const r = await fetch('/api/like', {
@@ -349,7 +364,11 @@
     });
 
     // initial count / state
-    setLikeUI(tile, f.name);
+    if (!likeEnabled) {
+      try { const lb = tile.querySelector('.likeBtn'); if (lb) lb.style.display = 'none'; } catch {}
+    } else {
+      setLikeUI(tile, f.name);
+    }
 
     // long-press on mobile enters select
     let lp = null;
@@ -379,7 +398,9 @@
 
       const src = (window.__activeSource || 'local');
       let r2;
-      if (src === 'immich') {
+      if (src === 'public') {
+        r2 = await fetch('/api/public/images?offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+      } else if (src === 'immich') {
         const albumId = getImmichAlbumId();
         r2 = await apiFetch('/api/immich/images?albumId=' + encodeURIComponent(albumId) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       } else {
@@ -587,6 +608,7 @@
     // exit detail mode
     detailMode = false;
     try { document.body.classList.remove('lbDetail'); } catch {}
+    try { syncDetailBtn(); } catch {}
 
     autoplayEnabled = false;
     autoplayRunning = false;
@@ -694,7 +716,7 @@
       if (zoom > 1.02) return;
       lb.classList.add('ctlHide');
       try { document.body.classList.add('fabHidden'); } catch {}
-    }, 2200);
+    }, 5000);
   }
   if (lb) {
     for (const ev of ['pointerdown','pointermove','touchstart','wheel','keydown']) {
@@ -704,12 +726,18 @@
 
   // detail mode (fit-to-screen, hide thumbs bar)
   let detailMode = false;
+  function syncDetailBtn(){
+    const b = $('lbDetailBtn');
+    if (!b) return;
+    b.textContent = detailMode ? '－' : '🔍';
+  }
   function setDetailMode(on){
     detailMode = !!on;
     try { document.body.classList.toggle('lbDetail', detailMode); } catch {}
     // reset zoom/pan when toggling modes
     zoom = 1; panX = 0; panY = 0;
     applyZoom();
+    syncDetailBtn();
     // keep controls visible briefly
     try { if (detailMode) document.body.classList.remove('fabHidden'); } catch {}
   }
@@ -848,7 +876,7 @@
       if (s && s.classList.contains('open')) return;
       if (lb && lb.classList.contains('open')) return;
       try { document.body.classList.add('fabHidden'); } catch {}
-    }, 2600);
+    }, 5000);
   }
   // show on user activity
   for (const ev of ['pointerdown','pointermove','touchstart','scroll','keydown']) {
@@ -886,9 +914,9 @@
       try { $('adminPass').value = ''; } catch {}
     }
 
-    // init token field
+    // init token field (force empty each time; user must re-enter for upload/delete)
     if ($('uploadToken')) {
-      try { $('uploadToken').value = getUploadToken(); } catch {}
+      try { $('uploadToken').value = ''; } catch {}
     }
 
     // init webdav/source UI
@@ -984,7 +1012,13 @@
     }
 
     if ($('uploadToken')) {
-      try { localStorage.setItem('gallery_upload_token', String($('uploadToken').value || '').trim()); } catch {}
+      // Do not persist token; require re-entry each time.
+      // Still keep it in-memory for the current action.
+    }
+
+    // like toggle
+    if ($('likeToggle')) {
+      // state is stored by setLikeEnabled()
     }
 
     // Remote sources (admin only)
@@ -995,10 +1029,30 @@
 
       // immich
       if ($('immichAlbum')) setImmichAlbumId($('immichAlbum').value || '');
+
+      // If source is immich, persist as public album for all visitors
+      if (($('sourceMode')?.value || getSourceMode()) === 'immich') {
+        try {
+          await apiFetch('/api/admin/public', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ source:'immich', immichAlbumId: getImmichAlbumId() })
+          });
+        } catch {}
+      }
     }
 
     closeSettings();
     await load(currentDir);
+  });
+
+  // init likes toggle
+  setLikeEnabled(likeEnabled);
+  on('likeToggle','click', (e) => {
+    e.preventDefault();
+    setLikeEnabled(!likeEnabled);
+    // re-render current view to remove/add overlays
+    load(currentDir);
   });
 
   // init cols
@@ -1114,6 +1168,10 @@
     if (!selected.size) return;
     if (!confirm('确认删除已选 ' + selected.size + ' 张图片？')) return;
     const names = Array.from(selected);
+    // store token for this session
+    const tokInput = ($('uploadToken') ? $('uploadToken').value : '').trim();
+    if (tokInput) setUploadToken(tokInput);
+
     const tok = getUploadToken();
     const headers = { 'Content-Type':'application/json' };
     if (tok) headers['x-upload-token'] = tok;
@@ -1139,6 +1197,10 @@
     if (!files || !files.length) return;
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
+    // store token for this session
+    const tokInput = ($('uploadToken') ? $('uploadToken').value : '').trim();
+    if (tokInput) setUploadToken(tokInput);
+
     const tok = getUploadToken();
     const src = (window.__activeSource || 'local');
     const url = (src === 'dav') ? ('/api/dav/upload?dir=' + encodeURIComponent(currentDir)) : ('/api/upload?dir=' + encodeURIComponent(currentDir));
@@ -1153,8 +1215,8 @@
     await load(currentDir);
   });
 
-  // detail button
-  on('detailBtn','click', (e) => {
+  // detail button (in lightbox)
+  on('lbDetailBtn','click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     if (!$('lb') || !$('lb').classList.contains('open')) return;
@@ -1228,14 +1290,23 @@
       const mode = getSourceMode();
 
       // decide active source
-      let active = 'local';
-      if (mode === 'dav') active = 'dav';
-      else if (mode === 'immich') active = 'immich';
-      else if (mode === 'local') active = 'local';
-      else active = 'auto';
+      // If not admin-unlocked, always use the public feed (no password required for visitors)
+      let active = (!getAdminPass()) ? 'public' : 'local';
+      if (getAdminPass()) {
+        if (mode === 'dav') active = 'dav';
+        else if (mode === 'immich') active = 'immich';
+        else if (mode === 'local') active = 'local';
+        else active = 'auto';
+      }
 
       // helper to fetch from a source
       const fetchSrc = async (src) => {
+        if (src === 'public') {
+          const r = await fetch('/api/public/images?offset=0&limit=' + PAGE_SIZE + order);
+          const j = await r.json();
+          j.__src = src;
+          return j;
+        }
         if (src === 'immich') {
           const albumId = getImmichAlbumId();
           const base = '/api/immich/images';
@@ -1245,7 +1316,7 @@
           return j;
         }
         const base = (src === 'dav') ? '/api/dav/images' : '/api/images';
-        const r = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order, {}, { webdav: (src === 'dav') });
+        const r = await apiFetch(base + '?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
         const j = await r.json();
         j.__src = src;
         return j;
@@ -1294,7 +1365,7 @@
 
     // load likes for current page (dir-scoped)
     likes.clear();
-    await fetchLikesFor(currentFiles.map(f => f.name));
+    if (likeEnabled) await fetchLikesFor(currentFiles.map(f => f.name));
     nextOffset = data.nextOffset || currentFiles.length;
     hasMore = !!data.hasMore;
 
@@ -1378,29 +1449,31 @@
         el.appendChild(img);
 
         // like overlay
-        const likeWrap = document.createElement('div');
-        likeWrap.className = 'likeBtn';
-        likeWrap.innerHTML = '<span class="heart">❤</span><span class="count">0</span>';
-        likeWrap.addEventListener('click', async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (isLiked(f.name)) return;
-          try {
-            const r = await fetch('/api/like', {
-              method:'POST',
-              headers:{ 'Content-Type':'application/json' },
-              body: JSON.stringify({ dir: currentDir || '', name: f.name })
-            });
-            const j = await r.json();
-            if (j && j.ok && typeof j.count === 'number') {
-              likes.set(String(f.name), j.count);
-              markLiked(f.name);
-              setLikeUI(el, f.name);
-            }
-          } catch {}
-        });
-        el.appendChild(likeWrap);
-        setLikeUI(el, f.name);
+        if (likeEnabled) {
+          const likeWrap = document.createElement('div');
+          likeWrap.className = 'likeBtn';
+          likeWrap.innerHTML = '<span class="heart">❤</span><span class="count">0</span>';
+          likeWrap.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (isLiked(f.name)) return;
+            try {
+              const r = await fetch('/api/like', {
+                method:'POST',
+                headers:{ 'Content-Type':'application/json' },
+                body: JSON.stringify({ dir: currentDir || '', name: f.name })
+              });
+              const j = await r.json();
+              if (j && j.ok && typeof j.count === 'number') {
+                likes.set(String(f.name), j.count);
+                markLiked(f.name);
+                setLikeUI(el, f.name);
+              }
+            } catch {}
+          });
+          el.appendChild(likeWrap);
+          setLikeUI(el, f.name);
+        }
 
         el.addEventListener('click', () => {
           const idx = currentFiles.findIndex(x => x.name === f.name);

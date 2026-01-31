@@ -501,6 +501,20 @@ app.post('/api/like', express.json({ limit: '16kb' }), (req, res) => {
 const IMMICH_URL = process.env.IMMICH_URL || '';
 const IMMICH_API_KEY = process.env.IMMICH_API_KEY || '';
 
+// Public gallery config (persisted on disk)
+const CONFIG_PATH = process.env.GALLERY_CONFIG_PATH || path.join(IMAGES_DIR, '.gallery_config.json');
+function loadGalleryCfg(){
+  try {
+    const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
+    const j = JSON.parse(raw);
+    return j && typeof j === 'object' ? j : {};
+  } catch { return {}; }
+}
+function saveGalleryCfg(cfg){
+  fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive:true });
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
 function immichCfgOk(){
   return !!(IMMICH_URL && IMMICH_API_KEY);
 }
@@ -535,7 +549,7 @@ async function immichStreamAny(res, candidates){
 }
 
 app.get('/api/immich/albums', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  // Public read endpoint (gallery can be public)
   if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
   try {
     const albums = await immichJson('/api/albums');
@@ -553,7 +567,7 @@ app.get('/api/immich/albums', async (req, res) => {
 });
 
 app.get('/api/immich/images', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  // Public read endpoint (gallery can be public)
   if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
 
   const albumId = (req.query.albumId || '').toString();
@@ -609,7 +623,7 @@ app.get('/api/immich/images', async (req, res) => {
 });
 
 app.get('/api/immich/thumb', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  // Public read endpoint
   if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
   const id = (req.query.id || '').toString();
   if (!id) return res.status(400).json({ error:'missing id' });
@@ -622,7 +636,7 @@ app.get('/api/immich/thumb', async (req, res) => {
 });
 
 app.get('/api/immich/file', async (req, res) => {
-  if (!requireAdmin(req, res)) return;
+  // Public read endpoint
   if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
   const id = (req.query.id || '').toString();
   if (!id) return res.status(400).json({ error:'missing id' });
@@ -959,6 +973,67 @@ app.post('/api/admin/unlock', express.json({ limit:'50kb' }), (req, res) => {
   ];
   res.setHeader('Set-Cookie', parts.join('; '));
   res.json({ ok:true });
+});
+
+// Admin: set public album (for everyone)
+app.post('/api/admin/public', express.json({ limit:'50kb' }), (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const source = (req.body?.source || '').toString();
+  const immichAlbumId = (req.body?.immichAlbumId || '').toString();
+  if (source !== 'immich') return res.status(400).json({ error:'unsupported source' });
+  if (!immichAlbumId) return res.status(400).json({ error:'missing album id' });
+
+  const cfg = loadGalleryCfg();
+  cfg.publicSource = 'immich';
+  cfg.immichAlbumId = immichAlbumId;
+  saveGalleryCfg(cfg);
+  res.json({ ok:true, publicSource: cfg.publicSource, immichAlbumId: cfg.immichAlbumId });
+});
+
+app.get('/api/public', (req, res) => {
+  const cfg = loadGalleryCfg();
+  res.json({
+    publicSource: cfg.publicSource || 'local',
+    immichAlbumId: cfg.immichAlbumId || ''
+  });
+});
+
+// Public images feed (used by visitors)
+app.get('/api/public/images', async (req, res) => {
+  const cfg = loadGalleryCfg();
+  const source = (cfg.publicSource || 'local').toString();
+  if (source !== 'immich') return res.status(400).json({ error:'public source not configured' });
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+  const albumId = (cfg.immichAlbumId || '').toString();
+  if (!albumId) return res.status(400).json({ error:'public album not configured' });
+
+  const offset = Math.max(0, parseInt((req.query.offset ?? '0').toString(), 10) || 0);
+  const limitRaw = parseInt((req.query.limit ?? '120').toString(), 10) || 120;
+  const limit = Math.max(1, Math.min(500, limitRaw));
+  const order = (req.query.order || '').toString();
+  const seed = (req.query.seed || '').toString();
+
+  try {
+    const album = await immichJson('/api/albums/' + encodeURIComponent(albumId));
+    const assets = Array.isArray(album?.assets) ? album.assets : [];
+    const allFiles = assets
+      .filter(a => (a?.type || '').toString().toUpperCase() === 'IMAGE')
+      .map(a => ({
+        name: String(a.id),
+        url: `/api/immich/file?id=${encodeURIComponent(String(a.id))}`,
+        thumbUrl: `/api/immich/thumb?id=${encodeURIComponent(String(a.id))}`,
+      }));
+
+    const shuffled = (order === 'random') ? seededShuffle(allFiles, seed || String(Date.now())) : allFiles;
+    const total = shuffled.length;
+    const files = shuffled.slice(offset, offset + limit);
+    const nextOffset = Math.min(total, offset + files.length);
+    const hasMore = nextOffset < total;
+
+    res.json({ dir:'public', dirs:[], files, total, offset, limit, nextOffset, hasMore });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
 });
 
 // Avoid stale frontend on mobile/desktop browsers & reverse proxies
