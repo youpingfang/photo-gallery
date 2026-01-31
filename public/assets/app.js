@@ -729,7 +729,7 @@
   function syncDetailBtn(){
     const b = $('lbDetailBtn');
     if (!b) return;
-    b.textContent = detailMode ? '－' : '🔍';
+    b.textContent = detailMode ? '－' : '＋';
   }
   function setDetailMode(on){
     detailMode = !!on;
@@ -1721,25 +1721,64 @@
           const idx = currentFiles.findIndex(x => x.name === name);
           openLb(Math.max(0, idx));
         });
+        // initial frame
+        try {
+          const frames = ['frame1','frame2','frame3','frame4'];
+          t.classList.add(frames[Math.floor(Math.random() * frames.length)]);
+        } catch {}
+
         cont.appendChild(t);
         tiles.push(t);
       }
 
-      // auto update: every 5s randomly swap ONE small tile (avoid full refresh)
-      const smallClassSet = new Set(['c2','c7','c8','c9','c10','c6']);
-      const smallTiles = tiles.filter(t => {
-        const cls = String(t.className || '');
-        for (const k of smallClassSet) if (cls.includes(k)) return true;
-        return false;
-      });
-      const pool = (smallTiles.length ? smallTiles : tiles);
+      function randomizeFrame(t){
+        if (!t) return;
+        // keep circle class if explicitly set; otherwise vary frame
+        const frames = ['frame1','frame2','frame3','frame4'];
+        for (const f of frames) t.classList.remove(f);
+        const f = frames[Math.floor(Math.random() * frames.length)];
+        t.classList.add(f);
+      }
+
+      // auto update: every 5s randomly swap 1~3 tiles (biased to 2)
+      const pool = tiles;
+      let lastSwap = new Set();
+
+      function pickK(){
+        const r = Math.random();
+        if (r < 0.20) return 1;
+        if (r < 0.80) return 2;
+        return 3;
+      }
 
       timer = setInterval(() => {
         if (!pool.length) return;
-        const t = pool[Math.floor(Math.random() * pool.length)];
-        const cur = t.getAttribute('data-name') || '';
-        const nf = pickNext(cur);
-        setTileImg(t, nf);
+        const k = Math.min(pool.length, pickK());
+        const chosen = [];
+        // avoid swapping the same tiles as last tick when possible
+        for (let tries=0; tries<60 && chosen.length < k; tries++) {
+          const t = pool[Math.floor(Math.random() * pool.length)];
+          if (!t) continue;
+          if (chosen.includes(t)) continue;
+          if (pool.length > k && lastSwap.has(t)) continue;
+          chosen.push(t);
+        }
+        // fallback fill
+        while (chosen.length < k) {
+          const t = pool[Math.floor(Math.random() * pool.length)];
+          if (!t || chosen.includes(t)) continue;
+          chosen.push(t);
+        }
+
+        const nextLast = new Set();
+        for (const t of chosen) {
+          nextLast.add(t);
+          const cur = t.getAttribute('data-name') || '';
+          const nf = pickNext(cur);
+          setTileImg(t, nf);
+          randomizeFrame(t);
+        }
+        lastSwap = nextLast;
       }, 5000);
 
       // cleanup hook

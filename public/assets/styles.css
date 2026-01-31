@@ -172,13 +172,14 @@ body.likeOff .likeBtn{ display:none !important; }
   position:absolute;
   inset:0;
   border-radius:inherit;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.10);
+  /* no bright edge */
+  box-shadow:none;
   z-index:1;
   pointer-events:none;
 }
 .tile:hover::before{ opacity:.26; }
-.tile.edgeGlow::after{ box-shadow: inset 0 0 0 2px rgba(255,255,255,.18), 0 0 60px rgba(110,168,254,.55), 0 0 24px rgba(255,0,153,.18); }
-.tile.edgeSoft::after{ box-shadow: inset 0 0 0 2px rgba(255,255,255,.14), 0 0 48px rgba(255,255,255,.22); filter: blur(.9px); }
+.tile.edgeGlow::after{ box-shadow:none; }
+.tile.edgeSoft::after{ box-shadow:none; filter:none; }
 
 .tile.sel{ outline:2px solid rgba(110,168,254,.9); outline-offset:-2px; }
 .tile.sel::before{ opacity:.38; }
@@ -379,16 +380,35 @@ body.immersive #apProg{ display:block; }
 
 /* bubble stage */
 .bubbleStage{ position:relative; width:100%; height: min(100dvh, 1200px); border-radius:var(--r-lg); border:0; background:transparent; overflow:hidden; box-shadow:none; }
-.bubbleTile{ position:absolute; left:0; top:0; width:160px; height:200px; border-radius:var(--r-sm); overflow:hidden; border:0; background: rgba(255,255,255,.04); box-shadow:0 12px 34px rgba(0,0,0,.28); transition: opacity .7s ease; }
+.bubbleTile{ position:absolute; left:0; top:0; width:160px; height:200px; border-radius:var(--r-sm); overflow:hidden; border:0;
+  /* no visible frame when image is missing */
+  background: transparent;
+  box-shadow:none;
+  transition: opacity .7s ease;
+}
 .bubbleTile img{ width:100%; height:100%; object-fit:cover; display:block; border-radius:inherit; position:relative; z-index:2; }
-.bubbleTile::before{ content:''; position:absolute; inset:-2px; border-radius:inherit; background:conic-gradient(from 180deg at 50% 50%, rgba(0,255,170,.95), rgba(0,170,255,.95), rgba(167,139,250,.95), rgba(255,0,153,.95), rgba(255,214,0,.95), rgba(0,255,170,.95)); filter: blur(12px); opacity:.20; z-index:0; pointer-events:none; }
-.bubbleTile::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.10); z-index:1; pointer-events:none; }
+/* remove glow/outline frame */
+.bubbleTile::before{ content:''; position:absolute; inset:-2px; border-radius:inherit; background:transparent; opacity:0; z-index:0; pointer-events:none; }
+.bubbleTile::after{ content:''; position:absolute; inset:0; border-radius:inherit; box-shadow:none; z-index:1; pointer-events:none; }
 .bubbleTile.circle, .bubbleTile.circle img{ border-radius:999px !important; }
 .bubbleTile.ellipse, .bubbleTile.ellipse img{ border-radius:999px !important; }
 
 /* collage mode */
 .collage{ display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; padding:10px; }
-.collage .cTile{ position:relative; overflow:hidden; border-radius:var(--r-md); background: rgba(255,255,255,.06); }
+.collage .cTile{ position:relative; overflow:hidden; border-radius:var(--r-md);
+  /* no visible frame when image is missing */
+  background: transparent;
+  transition: border-radius .35s ease;
+}
+/* collage frame variants */
+.collage .cTile.frame1{ border-radius: 22px; box-shadow:none; }
+.collage .cTile.frame2{ border-radius: 14px; box-shadow:none; }
+.collage .cTile.frame3{ border-radius: 28px; box-shadow:none; }
+.collage .cTile.frame4{ border-radius: 999px; box-shadow:none; }
+body.themeLight .collage .cTile.frame1,
+body.themeLight .collage .cTile.frame2,
+body.themeLight .collage .cTile.frame3,
+body.themeLight .collage .cTile.frame4{ box-shadow:none; }
 .collage .cTile.circle{ border-radius:999px; }
 .collage .cTile.circle .cImg{ border-radius:999px; }
 .collage .cTile .cImg{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; display:block; opacity:0; transition: opacity .65s ease; background:transparent; }

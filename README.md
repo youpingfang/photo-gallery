@@ -50,6 +50,14 @@ PORT=8088 IMAGES_DIR=/path/to/your/images npm start
 
 ## 环境变量
 
+### Docker Compose（推荐）
+仓库内提供了 `.env.example`：
+1) 复制为 `.env`
+2) 填入你的值（**不要提交 .env**）
+
+> Docker Compose 会自动读取同目录的 `.env`，用于替换 `compose.yaml` 里的 `${VAR}`。
+
+### Node 直跑
 | 变量 | 说明 | 默认 |
 |---|---|---|
 | `PORT` | 服务端口 | `3000` |
@@ -57,6 +65,14 @@ PORT=8088 IMAGES_DIR=/path/to/your/images npm start
 | `THUMB_WIDTH` | 缩略图宽度（可选） | （见代码默认） |
 | `THUMB_QUALITY` | 缩略图质量（可选） | （见代码默认） |
 | `UPLOAD_TOKEN` | 上传/删除鉴权 token（可选） | 空（不安全） |
+| `ADMIN_PASS` | 管理解锁密码（用于配置公共相册/管理操作） | 空（不启用） |
+| `IMMICH_URL` | Immich 公网地址 | 空 |
+| `IMMICH_API_KEY` | Immich API Key（仅服务端） | 空 |
+| `WEBDAV_ENABLED` | 是否启用 WebDAV | `0` |
+| `WEBDAV_URL` | WebDAV URL | 空 |
+| `WEBDAV_USER` | WebDAV 用户名 | 空 |
+| `WEBDAV_PASS` | WebDAV 密码 | 空 |
+| `GALLERY_CONFIG_PATH` | 公共相册配置文件路径 | `/images/.gallery_config.json` |
 | `REDIS_URL` | Redis 连接串（可选，用于元数据缓存） | 空 |
 
 示例：
