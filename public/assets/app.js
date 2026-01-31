@@ -583,6 +583,11 @@
     $('lb').classList.remove('open');
     $('lb').classList.remove('immersive');
     document.body.classList.remove('immersive');
+
+    // exit detail mode
+    detailMode = false;
+    try { document.body.classList.remove('lbDetail'); } catch {}
+
     autoplayEnabled = false;
     autoplayRunning = false;
     apStop();
@@ -697,6 +702,19 @@
     }
   }
 
+  // detail mode (fit-to-screen, hide thumbs bar)
+  let detailMode = false;
+  function setDetailMode(on){
+    detailMode = !!on;
+    try { document.body.classList.toggle('lbDetail', detailMode); } catch {}
+    // reset zoom/pan when toggling modes
+    zoom = 1; panX = 0; panY = 0;
+    applyZoom();
+    // keep controls visible briefly
+    try { if (detailMode) document.body.classList.remove('fabHidden'); } catch {}
+  }
+  function toggleDetailMode(){ setDetailMode(!detailMode); }
+
   // lightbox zoom (wheel + double click) and pan (drag when zoomed) + swipe navigation
   if (lb) {
     lb.addEventListener('wheel', (e) => {
@@ -714,13 +732,9 @@
 
     lb.addEventListener('dblclick', (e) => {
       if (!lb.classList.contains('open')) return;
-      const img = getActiveImg();
-      if (!img) return;
+      // double click behaves like the magnifier: toggle detail mode
       e.preventDefault();
-      setOriginFromEvent(img, e.clientX, e.clientY);
-      if (zoom <= 1.05) zoom = 2.5;
-      else { zoom = 1; panX = 0; panY = 0; }
-      applyZoom();
+      toggleDetailMode();
     });
 
     // drag to pan when zoomed
@@ -1137,6 +1151,14 @@
     }, { webdav: (src === 'dav') });
     if ($('file')) $('file').value = '';
     await load(currentDir);
+  });
+
+  // detail button
+  on('detailBtn','click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!$('lb') || !$('lb').classList.contains('open')) return;
+    toggleDetailMode();
   });
 
   // autoplay button

@@ -206,6 +206,7 @@ body.themeLight .fab button:active{ transform: translateY(1px); }
 #modeQuick{ font-size:13px; width:46px; height:46px; }
 /* icon buttons (keep buttons same size; only enlarge glyphs) */
 .fab #uploadBtn{ font-size:30px; }
+.fab #detailBtn{ font-size:24px; }
 .fab #settingsBtn{ font-size:28px; }
 .fab #playPref{ font-size:28px; }
 
@@ -259,10 +260,12 @@ body.themeLight #modeQuick{ color: rgba(12,18,34,.78); }
   transform: scale(1.08); opacity:.95; }
 .lb-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:var(--r-lg); background:transparent; display:block; transform-origin:50% 50%; transition:transform .12s ease; will-change:transform; opacity:0; }
 body.lbZoomed .lb-img{ object-fit:contain; }
+body.lbDetail .lb-img{ object-fit:contain; }
 .lb-img.isActive{ opacity: 1; }
 body.immersive .lb-img{ transition: transform .12s ease, opacity .28s ease; }
 
 .thumbsBar{ height:100%; min-height:64px; background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.08); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; }
+body.lbDetail .thumbsBar{ display:none; }
 
 /* meta sits at top of the thumbs bar (left date / right place) */
 #lbMeta{ position:relative; left:auto; right:auto; bottom:auto; transform:none; opacity:0; padding:6px 10px; background:transparent; border:0; pointer-events:none;
