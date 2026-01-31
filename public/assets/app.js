@@ -879,9 +879,13 @@
     }, 5000);
   }
   // show on user activity
-  for (const ev of ['pointerdown','pointermove','touchstart','scroll','keydown']) {
+  // (Alook sometimes misses pointer events; add click/touchend for reliability)
+  for (const ev of ['pointerdown','pointermove','touchstart','touchend','click','scroll','keydown']) {
     window.addEventListener(ev, showFab, { passive:true });
   }
+  // also capture taps inside the bubble stage (some browsers don't bubble reliably to window)
+  document.addEventListener('touchend', showFab, { passive:true });
+  document.addEventListener('click', showFab, { passive:true });
   // show initially then hide
   showFab();
 

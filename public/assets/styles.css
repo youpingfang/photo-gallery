@@ -65,25 +65,45 @@ body{
   min-height:100vh;
   isolation:isolate;
 }
-body::before{
+
+/* dark theme background (方案 3：纯深色 + 轻噪点纹理) */
+body:not(.themeLight){ background:#070914; }
+body:not(.themeLight)::before{
+  content:'';
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  /* subtle noise-ish texture */
+  background:
+    radial-gradient(900px 520px at 10% 15%, rgba(255,255,255,.055), rgba(255,255,255,0) 60%),
+    radial-gradient(700px 420px at 88% 22%, rgba(255,255,255,.045), rgba(255,255,255,0) 62%),
+    radial-gradient(820px 520px at 18% 88%, rgba(255,255,255,.040), rgba(255,255,255,0) 65%),
+    radial-gradient(680px 480px at 92% 86%, rgba(255,255,255,.035), rgba(255,255,255,0) 66%),
+    linear-gradient(180deg, rgba(255,255,255,.018), rgba(255,255,255,0));
+  opacity:.55;
+  filter: blur(0.2px);
+}
+
+/* light theme keeps the colorful bg */
+body.themeLight::before{
   content:'';
   position:fixed;
   inset:-20%;
   z-index:-1;
   background:conic-gradient(
     from 180deg at 50% 50%,
-    rgba(255, 0, 153, .38),
-    rgba(255, 102, 0, .28),
-    rgba(255, 214, 0, .26),
-    rgba(0, 255, 170, .26),
-    rgba(0, 170, 255, .30),
-    rgba(167, 139, 250, .34),
-    rgba(255, 0, 153, .38)
+    rgba(255, 0, 153, .26),
+    rgba(255, 102, 0, .18),
+    rgba(255, 214, 0, .18),
+    rgba(0, 255, 170, .18),
+    rgba(0, 170, 255, .20),
+    rgba(167, 139, 250, .22),
+    rgba(255, 0, 153, .26)
   );
-  filter: blur(40px) saturate(1.25);
-  opacity:.95;
+  filter: blur(42px) saturate(1.08);
+  opacity:.55;
   transform:translate3d(0,0,0);
-  animation:bgSpin 22s linear infinite;
+  animation:bgSpin 26s linear infinite;
 }
 @keyframes bgSpin{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
 /* immersive: no top chrome inside page */
@@ -279,6 +299,7 @@ body.lbDetail .lb-stage{ grid-template-rows: 1fr; }
 #lbMetaPlace{ flex:1 1 auto; text-align:right; max-width:60%; }
 
 .thumbs{ flex:1 1 auto; min-height:64px; display:flex; align-items:center; gap:8px; overflow-x:auto; padding:8px 6px 10px; -webkit-overflow-scrolling:touch; scrollbar-width:none; background:transparent; border:0; border-radius:0; touch-action: pan-x; }
+.immersive .thumbsBar{ display:none; }
 .immersive .thumbs{ display:none; }
 .immersive .lb-stage{ grid-template-rows: 1fr; }
 .thumbs::-webkit-scrollbar{ display:none; }

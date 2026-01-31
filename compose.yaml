@@ -7,8 +7,30 @@ services:
     environment:
       - PORT=3000
       - IMAGES_DIR=/images
-      # 上传口令（建议设置一个复杂点的）
+
+      # 管理解锁（用于配置数据源/相册等管理操作）
+      - ADMIN_PASS=${ADMIN_PASS:-}
+
+      # 上传/删除口令（建议设置一个复杂点的；不设置不安全）
       - UPLOAD_TOKEN=${UPLOAD_TOKEN:-}
+
+      # Immich（方式一：作为远程数据源）
+      - IMMICH_URL=${IMMICH_URL:-}
+      - IMMICH_API_KEY=${IMMICH_API_KEY:-}
+
+      # WebDAV（可选；连接信息在服务端 env 配置）
+      - WEBDAV_ENABLED=${WEBDAV_ENABLED:-0}
+      - WEBDAV_URL=${WEBDAV_URL:-}
+      - WEBDAV_USER=${WEBDAV_USER:-}
+      - WEBDAV_PASS=${WEBDAV_PASS:-}
+
+      # 公共相册配置文件（默认写入 /images/.gallery_config.json）
+      - GALLERY_CONFIG_PATH=${GALLERY_CONFIG_PATH:-/images/.gallery_config.json}
+
+      # 缩略图参数（可选）
+      - THUMB_WIDTH=${THUMB_WIDTH:-480}
+      - THUMB_QUALITY=${THUMB_QUALITY:-70}
+
     volumes:
       # 把宿主机图片目录挂载到容器 /images（需要写入所以不能 ro）
       - "${IMAGE_DIR_HOST:-./images}:/images"
