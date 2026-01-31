@@ -108,17 +108,21 @@
           </div>
         </div>
 
-        <div class="setSection adminOnly" id="dataSourceSec">
+        <div class="setSection" id="dataSourceSec">
           <div class="setTitle">公开展示的数据源</div>
-          <div class="setRow">
-            <div class="setLabel">让大家看到</div>
+          <div class="setRow adminOnly">
+            <div class="setLabel">选择图片源</div>
             <select id="sourceMode" class="sel" style="width:180px;">
               <option value="local">本地（/images）</option>
               <option value="immich">Immich 相册</option>
 <!-- WebDAV removed -->
             </select>
           </div>
-          <div class="setRow immichOnly">
+          <div class="setRow" id="localStatsRow">
+            <div class="setLabel">本地图片数量</div>
+            <div class="setHelp"><span id="localImgCount">…</span> 张</div>
+          </div>
+          <div class="setRow immichOnly adminOnly">
             <div class="setLabel">相册</div>
             <select id="immichAlbum" class="sel" style="width:260px;">
               <option value="">加载中…</option>

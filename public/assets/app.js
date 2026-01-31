@@ -891,6 +891,15 @@
     document.querySelectorAll('.immichOnly').forEach(el => {
       el.style.display = immichShow ? '' : 'none';
     });
+
+    // local count row: show only when current public source is local
+    try {
+      const row = $('localStatsRow');
+      if (row) {
+        const src = ($('sourceMode') && $('sourceMode').value) ? $('sourceMode').value : (window.__publicCfg?.publicSource || 'local');
+        row.style.display = (src === 'local') ? '' : 'none';
+      }
+    } catch {}
   }
 
   function openSettings(){
@@ -912,6 +921,7 @@
           if (cfg && cfg.publicSource) $('sourceMode').value = cfg.publicSource;
           syncSettingsLockUI();
           if (($('sourceMode').value === 'immich')) loadImmichAlbums();
+          refreshLocalStats();
         } catch {}
       });
 
@@ -920,6 +930,7 @@
         if ($('sourceMode').value === 'immich') {
           loadImmichAlbums();
         }
+        refreshLocalStats();
       });
     }
 
@@ -934,6 +945,8 @@
     if (isAdminUnlocked() && ($('sourceMode')?.value === 'immich')) {
       loadImmichAlbums();
     }
+    // show local library size in settings
+    refreshLocalStats();
     showFab();
   }
   function closeSettings(){ settings.classList.remove('open'); showFab(); }
@@ -1262,6 +1275,30 @@
     }
   }
 
+  async function refreshLocalStats(){
+    const row = $('localStatsRow');
+    const el = $('localImgCount');
+    if (!el || !row) return;
+
+    // only show when current public source is local
+    const src = ($('sourceMode') && $('sourceMode').value) ? $('sourceMode').value : (window.__publicCfg?.publicSource || 'local');
+    row.style.display = (src === 'local') ? '' : 'none';
+    if (src !== 'local') return;
+
+    try {
+      el.textContent = '…';
+      const r = await fetch('/api/public/local-stats', { credentials:'same-origin' });
+      const j = await r.json();
+      if (j && typeof j.totalImages === 'number') {
+        el.textContent = String(j.totalImages);
+      } else {
+        el.textContent = '-';
+      }
+    } catch {
+      try { el.textContent = '-'; } catch {}
+    }
+  }
+
   async function apiFetch(url, opts = {}, extra = {}){
     const headers = Object.assign({}, (opts.headers || {}));
     const admin = getAdminPass();
@@ -1275,6 +1312,8 @@
       const r = await fetch('/api/public', { credentials:'same-origin' });
       const j = await r.json();
       if (j && typeof j.likeEnabled === 'boolean') setLikeEnabled(j.likeEnabled);
+      // keep a global snapshot for UI decisions when settings are locked
+      try { window.__publicCfg = j || {}; } catch {}
       return j || {};
     } catch {
       return {};

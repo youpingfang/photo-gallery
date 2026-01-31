@@ -46,6 +46,9 @@ function cacheKeyImages(subdir){
   const d = (subdir || '').toString();
   return 'ig:images:v2:' + d;
 }
+function cacheKeyLocalStats(){
+  return 'ig:localstats:v1';
+}
 function cacheKeyMeta(imageAbs, mtimeMs){
   return 'ig:meta:v1:' + imageAbs + '|' + String(mtimeMs);
 }
@@ -76,6 +79,8 @@ async function invalidateImagesCache(subdir){
     cur = cur ? (cur + '/' + p) : p;
     keys.add(cacheKeyImages(cur));
   }
+  // Also invalidate global local stats cache (counts can change).
+  keys.add(cacheKeyLocalStats());
   try { await redis.del(Array.from(keys)); } catch {}
 }
 
@@ -368,6 +373,64 @@ app.get('/api/images', async (req, res) => {
     res.json({ dir: subdir, dirs, files, total, offset, limit, nextOffset, hasMore, cached: !!redis });
   } catch (err) {
     res.status(500).json({ error: String(err) });
+  }
+});
+
+function computeLocalImageTotal(){
+  // walk IMAGES_DIR recursively, excluding thumbs
+  let totalImages = 0;
+  const stack = [IMAGES_DIR];
+
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (e.name === THUMBS_SUBDIR) continue;
+        stack.push(path.join(dir, e.name));
+      } else if (e.isFile()) {
+        if (isImageFile(e.name)) totalImages++;
+      }
+    }
+  }
+  return totalImages;
+}
+
+async function getLocalStats(){
+  // Redis cache (short TTL) to avoid rescans
+  const cached = await cacheGetJson(cacheKeyLocalStats());
+  if (cached && typeof cached.totalImages === 'number') {
+    return { totalImages: cached.totalImages, cached: true };
+  }
+  const totalImages = computeLocalImageTotal();
+  const out = { totalImages };
+  await cacheSetJson(cacheKeyLocalStats(), out, 60);
+  return { totalImages, cached: false };
+}
+
+// Public: local images total (used by settings display)
+app.get('/api/public/local-stats', async (req, res) => {
+  try {
+    const st = await getLocalStats();
+    return res.json(st);
+  } catch (e) {
+    return res.status(500).json({ error: String(e) });
+  }
+});
+
+// Admin-only: same stats (kept for potential future admin tooling)
+app.get('/api/local/stats', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const st = await getLocalStats();
+    return res.json(st);
+  } catch (e) {
+    return res.status(500).json({ error: String(e) });
   }
 });
 
