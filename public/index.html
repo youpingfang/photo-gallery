@@ -118,24 +118,11 @@
 <!-- WebDAV removed -->
             </select>
           </div>
-          <div class="setRow">
-            <div class="setLabel">说明</div>
-            <div class="setHelp">访客无需密码，进入后看到的就是你在这里“保存并应用”的数据源（以最后一次保存为准）。</div>
-          </div>
-<!-- WebDAV removed -->
           <div class="setRow immichOnly">
             <div class="setLabel">相册</div>
             <select id="immichAlbum" class="sel" style="width:260px;">
               <option value="">加载中…</option>
             </select>
-          </div>
-          <div class="setRow immichOnly">
-            <div class="setLabel">说明</div>
-            <div class="setHelp">相册显示为「名称（数量）」；列表来自 Immich API。</div>
-          </div>
-          <div class="setRow">
-            <div class="setLabel">应用</div>
-            <div class="setHelp">点击「保存并应用」后立即生效，并写入配置文件；下次打开仍保持。</div>
           </div>
         </div>
 
@@ -186,11 +173,7 @@
             <div class="setLabel">小红心</div>
             <button id="likeToggle" class="btnGhost">小红心：开</button>
           </div>
-          <!-- 上传按钮已移到右下角浮动按钮，设置里不再重复 -->
-          <div class="setRow">
-            <div class="setLabel">删除</div>
-            <button id="enterDelete" class="btnDanger">删除模式</button>
-          </div>
+          <!-- 上传按钮在右下角；删除操作在解锁后通过图片选择栏完成 -->
         </div>
 
         <div class="setFooter">

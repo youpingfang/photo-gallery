@@ -1045,10 +1045,20 @@
 
   // init likes toggle
   setLikeEnabled(likeEnabled);
-  on('likeToggle','click', (e) => {
+  on('likeToggle','click', async (e) => {
     e.preventDefault();
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); openSettings(); return; }
     setLikeEnabled(!likeEnabled);
+    // Persist immediately (otherwise load() will re-sync from server config and flip back)
+    try {
+      await apiFetch('/api/admin/public', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({ likeEnabled })
+      });
+    } catch (err) {
+      alert('保存失败：' + (err && err.message ? err.message : String(err)));
+    }
     // re-render current view to remove/add overlays
     load(currentDir);
   });
