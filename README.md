@@ -36,60 +36,40 @@
 
 ---
 
-## 快速开始
+## 快速开始（Docker 部署）
 
-### 本地运行
+> 推荐用 Docker Compose 部署，省心且环境一致。
+
+### 1) 准备配置
+
+仓库内提供了 `.env.example`，复制为 `.env` 并填入你的值（**不要提交 .env**）：
 
 ```bash
-npm install
-PORT=8088 IMAGES_DIR=/path/to/your/images npm start
+cp .env.example .env
 ```
 
-打开：
-- http://localhost:8088/
+你至少需要填：
+- `IMAGE_DIR_HOST`：宿主机图片目录（会挂载到容器 `/images`）
+- `ADMIN_PASS`：管理密码（用于解锁管理设置）
+- （如需 Immich）`IMMICH_URL` / `IMMICH_API_KEY`
 
-> `IMAGES_DIR` 是图片目录，支持子目录结构（例如 `2026/01`）。
+### 2) 启动
+
+```bash
+docker compose up -d
+```
+
+### 3) 打开
+
+- http://localhost:6789/
+
+> 端口在 `compose.yaml` 里写死为 `6789:3000`，如需改端口请自行修改该行。
 
 ---
 
-## 环境变量
+## 环境变量（Docker Compose）
 
-### Docker Compose（推荐）
-仓库内提供了 `.env.example`：
-1) 复制为 `.env`
-2) 填入你的值（**不要提交 .env**）
-
-> Docker Compose 会自动读取同目录的 `.env`，用于替换 `compose.yaml` 里的 `${VAR}`。
-
-### Node 直跑
-| 变量 | 说明 | 默认 |
-|---|---|---|
-| `PORT` | 服务端口 | `3000` |
-| `IMAGES_DIR` | 图片目录（必填） | `/images` |
-| `THUMB_WIDTH` | 缩略图宽度（可选） | （见代码默认） |
-| `THUMB_QUALITY` | 缩略图质量（可选） | （见代码默认） |
-| （已移除） | 上传/删除已统一由 `ADMIN_PASS` 解锁（cookie，默认 7 天）控制 | |
-| `ADMIN_PASS` | 管理解锁密码（用于配置公共相册/管理操作） | 空（不启用） |
-| `IMMICH_URL` | Immich 公网地址 | 空 |
-| `IMMICH_API_KEY` | Immich API Key（仅服务端） | 空 |
-| `WEBDAV_ENABLED` | 是否启用 WebDAV | `0` |
-| `WEBDAV_URL` | WebDAV URL | 空 |
-| `WEBDAV_USER` | WebDAV 用户名 | 空 |
-| `WEBDAV_PASS` | WebDAV 密码 | 空 |
-| `GALLERY_CONFIG_PATH` | 公共相册配置文件路径 | `/images/.gallery_config.json` |
-| `REDIS_URL` | Redis 连接串（可选，用于元数据缓存） | 空 |
-
-示例：
-
-```bash
-PORT=8088 \
-IMAGES_DIR=/data/photos \
-# UPLOAD_TOKEN 已移除：上传/删除由 ADMIN_PASS 解锁控制
-REDIS_URL=redis://127.0.0.1:6379 \
-npm start
-```
-
----
+所有变量都写在 `.env.example` 里，并带中文注释。
 
 ## 使用说明
 
