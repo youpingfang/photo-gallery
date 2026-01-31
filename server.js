@@ -18,7 +18,7 @@ app.set('trust proxy', 1);
 
 const PORT = process.env.PORT || 3000;
 const IMAGES_DIR = process.env.IMAGES_DIR || '/images';
-const UPLOAD_TOKEN = process.env.UPLOAD_TOKEN || '';
+// Upload/Delete are admin-only (cookie-based unlock).
 const REDIS_URL = process.env.REDIS_URL || '';
 const ADMIN_PASS = process.env.ADMIN_PASS || '';
 
@@ -99,7 +99,7 @@ function seededShuffle(arr, seedStr){
   return out;
 }
 
-// 测试模式：不设置 token 时允许删除（不安全）。生产环境强烈建议设置 UPLOAD_TOKEN。
+// 上传/删除等管理操作已统一为 ADMIN_PASS 解锁（cookie）控制。
 
 function parseCookies(req){
   const h = (req.headers['cookie'] || '').toString();
@@ -276,10 +276,6 @@ const upload = multer({
 
 app.post('/api/upload', upload.array('files', 50), async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  if (UPLOAD_TOKEN) {
-    const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
-    if (token !== UPLOAD_TOKEN) return res.status(401).json({ error: 'bad token' });
-  }
 
   const files = (req.files || []).map(f => ({
     name: f.filename,
@@ -322,11 +318,6 @@ app.get('/api/thumb', async (req, res) => {
 
 app.post('/api/delete', express.json({ limit: '1mb' }), async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  // 简单鉴权：如果设置了 UPLOAD_TOKEN，则删除也必须带 token
-  if (UPLOAD_TOKEN) {
-    const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
-    if (token !== UPLOAD_TOKEN) return res.status(401).json({ error: 'bad token' });
-  }
 
   // NOTE: frontend historically passed dir via querystring; accept both for compatibility.
   const subdir = ((req.body?.dir ?? req.query?.dir) || '').toString();
@@ -798,10 +789,6 @@ app.post('/api/dav/upload', upload.array('files', 50), async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const cfg = getWebdavCfg(req);
   if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-  if (UPLOAD_TOKEN) {
-    const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
-    if (token !== UPLOAD_TOKEN) return res.status(401).json({ error: 'bad token' });
-  }
 
   const subdir = (req.query.dir || '').toString();
   const auth = basicAuthHeader(cfg.user, cfg.pass);
@@ -828,10 +815,6 @@ app.post('/api/dav/delete', express.json({ limit:'1mb' }), async (req, res) => {
   if (!requireAdmin(req, res)) return;
   const cfg = getWebdavCfg(req);
   if (!cfg) return res.status(400).json({ error: 'missing webdav config' });
-  if (UPLOAD_TOKEN) {
-    const token = (req.headers['x-upload-token'] || req.body?.token || '').toString();
-    if (token !== UPLOAD_TOKEN) return res.status(401).json({ error: 'bad token' });
-  }
 
   const subdir = ((req.body?.dir ?? req.query?.dir) || '').toString();
   const names = Array.isArray(req.body?.names) ? req.body.names.map(String) : [];
@@ -969,7 +952,8 @@ app.post('/api/admin/unlock', express.json({ limit:'50kb' }), (req, res) => {
     'HttpOnly',
     'SameSite=Lax',
     'Secure',
-    `Max-Age=${30*24*3600}`,
+    // 7 days
+    `Max-Age=${7*24*3600}`,
   ];
   res.setHeader('Set-Cookie', parts.join('; '));
   res.json({ ok:true });

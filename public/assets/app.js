@@ -93,13 +93,7 @@
   let selectMode = false;
   const selected = new Set();
 
-  // upload/delete token (session-only; user re-enters each time)
-  function getUploadToken(){
-    try { return (sessionStorage.getItem('gallery_upload_token') || '').trim(); } catch { return ''; }
-  }
-  function setUploadToken(v){
-    try { sessionStorage.setItem('gallery_upload_token', String(v||'').trim()); } catch {}
-  }
+  // upload/delete token removed (admin unlock controls management actions)
 
   // admin pass (session-scoped)
   function getAdminPass(){
@@ -919,9 +913,7 @@
     }
 
     // init token field (force empty each time; user must re-enter for upload/delete)
-    if ($('uploadToken')) {
-      try { $('uploadToken').value = ''; } catch {}
-    }
+    // uploadToken removed
 
     // init webdav/source UI
     if ($('sourceMode')) {
@@ -1015,10 +1007,7 @@
       try { localStorage.setItem('gallery_bubble_count', String(n)); } catch {}
     }
 
-    if ($('uploadToken')) {
-      // Do not persist token; require re-entry each time.
-      // Still keep it in-memory for the current action.
-    }
+    // uploadToken removed
 
     // like toggle
     if ($('likeToggle')) {
@@ -1172,20 +1161,16 @@
     if (!selected.size) return;
     if (!confirm('确认删除已选 ' + selected.size + ' 张图片？')) return;
     const names = Array.from(selected);
-    // store token for this session
-    const tokInput = ($('uploadToken') ? $('uploadToken').value : '').trim();
-    if (tokInput) setUploadToken(tokInput);
+    if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
-    const tok = getUploadToken();
     const headers = { 'Content-Type':'application/json' };
-    if (tok) headers['x-upload-token'] = tok;
     const src = (window.__activeSource || 'local');
     const url = (src === 'dav') ? ('/api/dav/delete?dir=' + encodeURIComponent(currentDir)) : ('/api/delete?dir=' + encodeURIComponent(currentDir));
     const r = await apiFetch(url, {
       method:'POST',
       headers,
       body: JSON.stringify({ dir: currentDir, names })
-    }, { webdav: (src === 'dav') });
+    });
     const j = await r.json();
     // reload
     exitSelectMode();
@@ -1201,20 +1186,14 @@
     if (!files || !files.length) return;
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
-    // store token for this session
-    const tokInput = ($('uploadToken') ? $('uploadToken').value : '').trim();
-    if (tokInput) setUploadToken(tokInput);
+    if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
-    const tok = getUploadToken();
     const src = (window.__activeSource || 'local');
     const url = (src === 'dav') ? ('/api/dav/upload?dir=' + encodeURIComponent(currentDir)) : ('/api/upload?dir=' + encodeURIComponent(currentDir));
-    const headers = {};
-    if (tok) headers['x-upload-token'] = tok;
     await apiFetch(url, {
       method:'POST',
-      headers,
       body: fd
-    }, { webdav: (src === 'dav') });
+    });
     if ($('file')) $('file').value = '';
     await load(currentDir);
   });

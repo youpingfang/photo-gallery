@@ -64,7 +64,7 @@ PORT=8088 IMAGES_DIR=/path/to/your/images npm start
 | `IMAGES_DIR` | 图片目录（必填） | `/images` |
 | `THUMB_WIDTH` | 缩略图宽度（可选） | （见代码默认） |
 | `THUMB_QUALITY` | 缩略图质量（可选） | （见代码默认） |
-| `UPLOAD_TOKEN` | 上传/删除鉴权 token（可选） | 空（不安全） |
+| （已移除） | 上传/删除已统一由 `ADMIN_PASS` 解锁（cookie，默认 7 天）控制 | |
 | `ADMIN_PASS` | 管理解锁密码（用于配置公共相册/管理操作） | 空（不启用） |
 | `IMMICH_URL` | Immich 公网地址 | 空 |
 | `IMMICH_API_KEY` | Immich API Key（仅服务端） | 空 |
@@ -80,7 +80,7 @@ PORT=8088 IMAGES_DIR=/path/to/your/images npm start
 ```bash
 PORT=8088 \
 IMAGES_DIR=/data/photos \
-UPLOAD_TOKEN=your_token \
+# UPLOAD_TOKEN 已移除：上传/删除由 ADMIN_PASS 解锁控制
 REDIS_URL=redis://127.0.0.1:6379 \
 npm start
 ```
@@ -99,8 +99,8 @@ npm start
 
 如果部署到公网，强烈建议：
 
-1) 设置 `UPLOAD_TOKEN`（否则任何人都可能上传/删除）
-2) 通过反向代理做访问控制（Basic Auth / IP 白名单 / VPN）
+1) 设置 `ADMIN_PASS`（用于解锁管理设置；上传/删除也需要先解锁）
+2) 如部署到公网，建议通过反向代理做访问控制（Basic Auth / IP 白名单 / VPN）
 
 ---
 

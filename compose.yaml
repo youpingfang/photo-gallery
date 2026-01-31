@@ -11,8 +11,7 @@ services:
       # 管理解锁（用于配置数据源/相册等管理操作）
       - ADMIN_PASS=${ADMIN_PASS}
 
-      # 上传/删除口令（建议设置一个复杂点的；不设置不安全）
-      - UPLOAD_TOKEN=${UPLOAD_TOKEN}
+      # 上传/删除等管理操作已统一由 ADMIN_PASS 解锁（cookie）控制
 
       # Immich（方式一：作为远程数据源）
       - IMMICH_URL=${IMMICH_URL}
