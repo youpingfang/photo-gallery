@@ -103,16 +103,10 @@
     try { sessionStorage.setItem('gallery_admin_pass', String(v||'').trim()); } catch {}
   }
 
-  // source mode
-  function getSourceMode(){
-    try { return (localStorage.getItem('gallery_source_mode') || 'local').trim(); } catch { return 'local'; }
-  }
+  // source mode is global (admin chooses public source). No per-device source.
   function isImmichMode(){
-    const m = getSourceMode();
-    return m === 'immich';
-  }
-  function setSourceMode(v){
-    try { localStorage.setItem('gallery_source_mode', String(v||'local')); } catch {}
+    // UI helper (based on current select value)
+    try { return ($('sourceMode') && $('sourceMode').value === 'immich'); } catch { return false; }
   }
 
   // immich
@@ -392,11 +386,9 @@
       let r2;
       if (src === 'public') {
         r2 = await fetch('/api/public/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
-      } else if (src === 'immich') {
-        const albumId = getImmichAlbumId();
-        r2 = await apiFetch('/api/immich/images?albumId=' + encodeURIComponent(albumId) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       } else {
-        r2 = await apiFetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
+        // No per-device sources: use public feed only
+        r2 = await fetch('/api/public/images?dir=' + encodeURIComponent(currentDir) + '&offset=' + nextOffset + '&limit=' + PAGE_SIZE + order);
       }
       const d2 = await r2.json();
       if (d2.error) throw new Error(d2.error);
@@ -895,7 +887,7 @@
     if ($('adminUnlock')) $('adminUnlock').style.display = unlocked ? 'none' : '';
 
     // immichOnly rows only when unlocked + mode immich
-    const immichShow = unlocked && ($('sourceMode') ? ($('sourceMode').value === 'immich') : (getSourceMode() === 'immich'));
+    const immichShow = unlocked && ($('sourceMode') ? ($('sourceMode').value === 'immich') : false);
     document.querySelectorAll('.immichOnly').forEach(el => {
       el.style.display = immichShow ? '' : 'none';
     });
@@ -912,9 +904,17 @@
     // init token field (force empty each time; user must re-enter for upload/delete)
     // uploadToken removed
 
-    // init source UI
+    // init source UI (reflect global public source)
     if ($('sourceMode')) {
-      try { $('sourceMode').value = getSourceMode(); } catch {}
+      // Load current public config to keep phone/desktop consistent
+      fetchPublicCfg().then((cfg) => {
+        try {
+          if (cfg && cfg.publicSource) $('sourceMode').value = cfg.publicSource;
+          syncSettingsLockUI();
+          if (($('sourceMode').value === 'immich')) loadImmichAlbums();
+        } catch {}
+      });
+
       $('sourceMode').addEventListener('change', () => {
         syncSettingsLockUI();
         if ($('sourceMode').value === 'immich') {
@@ -922,16 +922,16 @@
         }
       });
     }
-    // (WebDAV removed)
 
     // immich album
     if ($('immichAlbum')) {
+      // Use stored selection as default, but public config ultimately controls what visitors see.
       $('immichAlbum').value = getImmichAlbumId();
       $('immichAlbum').addEventListener('change', () => setImmichAlbumId($('immichAlbum').value || ''));
     }
 
     syncSettingsLockUI();
-    if (isAdminUnlocked() && ($('sourceMode')?.value === 'immich' || getSourceMode() === 'immich')) {
+    if (isAdminUnlocked() && ($('sourceMode')?.value === 'immich')) {
       loadImmichAlbums();
     }
     showFab();
@@ -1015,14 +1015,14 @@
     if (!isAdminUnlocked()) {
       // allow saving non-admin options, but do not apply admin settings
     } else {
-      if ($('sourceMode')) setSourceMode($('sourceMode').value || 'local');
+      // source is global; do not persist per-device
 
       // immich
       if ($('immichAlbum')) setImmichAlbumId($('immichAlbum').value || '');
 
       // Persist as public source + global toggles for all visitors
       try {
-        const src = ($('sourceMode')?.value || getSourceMode() || 'local');
+        const src = ($('sourceMode')?.value || 'local');
         if (src === 'local') {
           await apiFetch('/api/admin/public', {
             method:'POST',
@@ -1179,6 +1179,9 @@
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
     const headers = { 'Content-Type':'application/json' };
+    // Delete is only supported for local library
+    const pub = await fetchPublicCfg();
+    if (pub && pub.publicSource === 'immich') { alert('当前公开源为 Immich，相册不支持删除；请先切回本地（/images）再删除。'); return; }
     const url = '/api/delete?dir=' + encodeURIComponent(currentDir);
     const r = await apiFetch(url, {
       method:'POST',
@@ -1202,6 +1205,8 @@
     for (const f of files) fd.append('files', f, f.name);
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
+    // Upload always goes to local library (/images)
+    // Even when public source is Immich, we allow uploading to local for convenience.
     const url = '/api/upload?dir=' + encodeURIComponent(currentDir);
     await apiFetch(url, {
       method:'POST',
@@ -1296,15 +1301,9 @@
       const seed = (viewMode === 'masonry') ? String(Date.now()) : '';
       const order = (viewMode === 'masonry') ? '&order=random&seed=' + encodeURIComponent(seed) : '';
 
-      const mode = getSourceMode();
-
       // decide active source
-      // If not admin-unlocked, always use the public feed (no password required for visitors)
-      let active = (!getAdminPass()) ? 'public' : 'local';
-      if (getAdminPass()) {
-        if (mode === 'immich') active = 'immich';
-        else active = 'local';
-      }
+      // Always follow the global public source (keeps phone/desktop consistent)
+      let active = 'public';
 
       // helper to fetch from a source
       const fetchSrc = async (src) => {
@@ -1314,25 +1313,14 @@
           j.__src = src;
           return j;
         }
-        if (src === 'immich') {
-          const albumId = getImmichAlbumId();
-          const base = '/api/immich/images';
-          const r = await apiFetch(base + '?albumId=' + encodeURIComponent(albumId) + '&offset=0&limit=' + PAGE_SIZE + order);
-          const j = await r.json();
-          j.__src = src;
-          return j;
-        }
-        const r = await apiFetch('/api/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
+        // No per-device sources: use public feed only
+        const r = await fetch('/api/public/images?dir=' + encodeURIComponent(currentDir) + '&offset=0&limit=' + PAGE_SIZE + order);
         const j = await r.json();
-        j.__src = src;
+        j.__src = 'public';
         return j;
       };
 
-      if ((active === 'immich') && !getAdminPass()) {
-        data = { error: '远程数据需要先在设置里解锁管理密码' };
-      } else {
-        data = await fetchSrc(active);
-      }
+      data = await fetchSrc(active);
 
       window.__activeSource = data.__src || active;
     } catch (e) {
@@ -1416,7 +1404,8 @@
 
       const { Engine, Bodies, Body, Composite, Runner } = Matter;
       const engine = Engine.create();
-      engine.enableSleeping = false;
+      // allow sleeping to reduce CPU on desktop
+      engine.enableSleeping = true;
       engine.gravity.y = 0.9;
 
       const rect = stage.getBoundingClientRect();
@@ -1513,6 +1502,22 @@
           try { Body.setVelocity(body, { x: opts.vx || 0, y: opts.vy || 0 }); } catch {}
         }
 
+        // Desktop UX: pause a bubble when mouse hovers it
+        if (!isMobileLike()) {
+          el.addEventListener('mouseenter', () => {
+            try {
+              Body.setVelocity(body, { x: 0, y: 0 });
+              Body.setAngularVelocity(body, 0);
+              Body.setStatic(body, true);
+            } catch {}
+          });
+          el.addEventListener('mouseleave', () => {
+            try {
+              Body.setStatic(body, false);
+            } catch {}
+          });
+        }
+
         currentNames.add(f.name);
         bodies.push({ body, el, w, h: hpx, name: f.name, fadeInPending });
       }
@@ -1585,16 +1590,23 @@
         }, 5000);
       }
 
-      // render loop
+      // render loop (throttled + GPU-friendly transforms)
       let rafId = 0;
-      (function raf(){
-        for (const it of bodies){
-          const b = it.body;
-          it.el.style.transform = 'translate(' + (b.position.x - it.w/2) + 'px,' + (b.position.y - it.h/2) + 'px) rotate(' + b.angle + 'rad)';
-          // fade in only after the tile has actually entered the viewport area
-          if (it.fadeInPending && b.position.y > 40) {
-            it.fadeInPending = false;
-            it.el.style.opacity = '1';
+      let lastPaint = 0;
+      const paintEveryMs = 33; // ~30fps to reduce jank on some desktops
+      (function raf(ts){
+        if (!ts) ts = performance.now();
+        if ((ts - lastPaint) >= paintEveryMs) {
+          lastPaint = ts;
+          for (const it of bodies){
+            const b = it.body;
+            // translate3d helps GPU compositing on many browsers
+            it.el.style.transform = 'translate3d(' + (b.position.x - it.w/2) + 'px,' + (b.position.y - it.h/2) + 'px,0) rotate(' + b.angle + 'rad)';
+            // fade in only after the tile has actually entered the viewport area
+            if (it.fadeInPending && b.position.y > 40) {
+              it.fadeInPending = false;
+              it.el.style.opacity = '1';
+            }
           }
         }
         rafId = requestAnimationFrame(raf);
