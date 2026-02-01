@@ -1112,11 +1112,55 @@
     if (vm === 'masonry') return '瀑布';
     return '泡泡';
   }
+  // tilt (gravity direction) settings: auto | manual | off
+  let tiltMode = 'auto';
+  try { tiltMode = (localStorage.getItem('gallery_tilt_mode') || 'auto').trim(); } catch {}
+  let tiltX = 0;
+  let tiltY = 35;
+  try { tiltX = parseInt(localStorage.getItem('gallery_tilt_x') || '0', 10) || 0; } catch {}
+  try { tiltY = parseInt(localStorage.getItem('gallery_tilt_y') || '35', 10) || 35; } catch {}
+
+  function syncTiltUI(mode){
+    const m = mode || tiltMode;
+    if ($('tiltWrap')) $('tiltWrap').style.display = (viewMode === 'bubble') ? 'flex' : 'none';
+    if ($('tiltManualWrap')) $('tiltManualWrap').style.display = (viewMode === 'bubble' && m === 'manual') ? 'flex' : 'none';
+    if ($('tiltManualWrap2')) $('tiltManualWrap2').style.display = (viewMode === 'bubble' && m === 'manual') ? 'flex' : 'none';
+    try { if ($('tiltMode')) $('tiltMode').value = m; } catch {}
+    try { if ($('tiltX')) $('tiltX').value = String(tiltX); } catch {}
+    try { if ($('tiltY')) $('tiltY').value = String(tiltY); } catch {}
+  }
+
+  if ($('tiltMode')) {
+    try { $('tiltMode').value = tiltMode; } catch {}
+    $('tiltMode').addEventListener('change', () => {
+      tiltMode = ($('tiltMode').value || 'auto');
+      try { localStorage.setItem('gallery_tilt_mode', tiltMode); } catch {}
+      syncTiltUI();
+      // apply immediately
+      load(currentDir);
+    });
+  }
+  if ($('tiltX')) {
+    try { $('tiltX').value = String(tiltX); } catch {}
+    $('tiltX').addEventListener('input', () => {
+      tiltX = parseInt($('tiltX').value || '0', 10) || 0;
+      try { localStorage.setItem('gallery_tilt_x', String(tiltX)); } catch {}
+    });
+  }
+  if ($('tiltY')) {
+    try { $('tiltY').value = String(tiltY); } catch {}
+    $('tiltY').addEventListener('input', () => {
+      tiltY = parseInt($('tiltY').value || '35', 10) || 35;
+      try { localStorage.setItem('gallery_tilt_y', String(tiltY)); } catch {}
+    });
+  }
+
   function syncModeUI(vm){
     const mode = (vm === 'bubble' || vm === 'masonry' || vm === 'collage') ? vm : 'bubble';
     if ($('bubbleCountWrap')) $('bubbleCountWrap').style.display = (mode === 'bubble') ? 'flex' : 'none';
     if ($('collageHint')) $('collageHint').style.display = (mode === 'collage') ? 'flex' : 'none';
     if ($('colsWrap')) $('colsWrap').style.display = (mode === 'masonry') ? 'flex' : 'none';
+    syncTiltUI(mode);
     if ($('modeQuick')) $('modeQuick').innerHTML = '<div class="mqTop">' + modeLabel(mode) + '</div><div class="mqBottom">模式</div>';
   }
 
@@ -1479,6 +1523,7 @@
     if (viewMode === 'bubble' && window.Matter) {
       const MAX = clampInt(bubbleCount, 5, 80) || (isMobileLike() ? 20 : 25);
       const files = currentFiles.slice(0, MAX);
+      const screensaver = files.length < MAX;
 
       const stage = document.createElement('div');
       stage.className = 'bubbleStage';
@@ -1487,19 +1532,22 @@
 
       const { Engine, Bodies, Body, Composite, Runner } = Matter;
       const engine = Engine.create();
-      // allow sleeping to reduce CPU on desktop
-      engine.enableSleeping = true;
-      engine.gravity.y = 0.9;
+      // allow sleeping to reduce CPU on desktop; but keep screensaver mode always moving
+      engine.enableSleeping = !screensaver;
+      engine.gravity.y = screensaver ? 0 : 0.9;
 
       const rect = stage.getBoundingClientRect();
       const W = Math.max(320, Math.floor(rect.width));
       const H = Math.max(420, Math.floor(rect.height));
 
-      const wallOpts = { isStatic:true, restitution:0.85, friction:0.02 };
-      // Walls: keep sides/bottom. Put top wall far above so "rain" can enter without getting stuck.
+      const wallOpts = { isStatic:true, restitution: (screensaver ? 0.98 : 0.85), friction:0.02 };
+      // Walls:
+      // - normal mode: top wall far above so "rain" can enter without getting stuck
+      // - screensaver mode: tight top wall so bubbles keep bouncing inside the viewport
       Composite.add(engine.world, [
-        Bodies.rectangle(W/2, -1200, W+260, 200, wallOpts),
+        Bodies.rectangle(W/2, screensaver ? -24 : -1200, W+260, 48, wallOpts),
         Bodies.rectangle(W/2, H+24, W+200, 48, wallOpts),
+        // Keep side walls near the viewport so bubbles don't leak out.
         Bodies.rectangle(-24, H/2, 48, H+200, wallOpts),
         Bodies.rectangle(W+24, H/2, 48, H+200, wallOpts),
       ]);
@@ -1605,17 +1653,55 @@
         bodies.push({ body, el, w, h: hpx, name: f.name, fadeInPending });
       }
 
-      for (let i=0;i<files.length;i++) makeBubble(files[i], i);
+      for (let i=0;i<files.length;i++) {
+        if (screensaver) {
+          const rx = 40 + (Math.random() * (W - 80));
+          const ry = 60 + (Math.random() * (H - 120));
+          makeBubble(files[i], i, {
+            x: rx,
+            y: ry,
+            vx: (Math.random() - 0.5) * 6,
+            vy: (Math.random() - 0.5) * 6,
+            air: 0.010,
+          });
+        } else {
+          makeBubble(files[i], i);
+        }
+      }
 
       const runner = Runner.create();
       Runner.run(runner, engine);
 
-      // subtle drift (avoid fighting the "rain" feeling)
+      // subtle drift
       const kickInt = setInterval(() => {
         for (const it of bodies){
-          Body.applyForce(it.body, it.body.position, { x:(Math.random()-0.5)*0.0010, y:0 });
+          if (screensaver) {
+            // keep them lively: stronger impulses + occasional velocity nudges
+            try {
+              Body.applyForce(it.body, it.body.position, { x:(Math.random()-0.5)*0.0060, y:(Math.random()-0.5)*0.0060 });
+              if (Math.random() < 0.15) {
+                const v = it.body.velocity || { x:0, y:0 };
+                Body.setVelocity(it.body, { x: v.x + (Math.random()-0.5)*3.0, y: v.y + (Math.random()-0.5)*3.0 });
+              }
+              if (Math.random() < 0.10) {
+                Body.setAngularVelocity(it.body, (Math.random()-0.5)*0.18);
+              }
+            } catch {}
+          } else {
+            // make the "rain" feel more lively (stronger sideways sway + a bit of spin)
+            try {
+              Body.applyForce(it.body, it.body.position, { x:(Math.random()-0.5)*0.0040, y:0 });
+              if (Math.random() < 0.08) {
+                const v = it.body.velocity || { x:0, y:0 };
+                Body.setVelocity(it.body, { x: v.x + (Math.random()-0.5)*1.2, y: v.y });
+              }
+              if (Math.random() < 0.06) {
+                Body.setAngularVelocity(it.body, (Math.random()-0.5)*0.10);
+              }
+            } catch {}
+          }
         }
-      }, 800);
+      }, screensaver ? 420 : 800);
 
       // rotate bubbles to show more
       let swapInt = 0;
@@ -1655,23 +1741,110 @@
             currentNames.delete(victim.name);
             bodies.splice(idx, 1);
 
-            // add new as "rain": spawn above viewport and fall down
-            const rx = 40 + (Math.random() * (W - 80));
-            const spawnY = -260 - Math.floor(Math.random() * 220);
+            // add new: spawn from top/left/right edges (top-biased)
+            const pick = Math.random();
+            let spawnX = 0, spawnY = 0, vx0 = 0, vy0 = 0;
+            if (pick < 0.30) {
+              // TOP (30%): very slow "leak in" from above
+              spawnX = 40 + (Math.random() * (W - 80));
+              spawnY = -260 - Math.floor(Math.random() * 200);
+              vx0 = (Math.random() - 0.5) * 0.25;
+              vy0 = 0.85 + Math.random() * 0.45;
+            } else if (pick < 0.65) {
+              // LEFT (35%): only from top half, start half-visible at the edge then slowly drift in
+              // Note: Matter body position is the CENTER. Keep it inside the side wall (x >= ~0).
+              spawnX = (baseW / 2) - 8; // left edge ≈ -8px
+              spawnY = 40 + (Math.random() * (Math.max(140, H * 0.50) - 90));
+              vx0 = 0.55 + Math.random() * 0.45;
+              vy0 = (Math.random() - 0.5) * 0.20;
+            } else {
+              // RIGHT (35%): only from top half, start half-visible at the edge then slowly drift in
+              spawnX = W - (baseW / 2) + 8; // right edge ≈ W+8px
+              spawnY = 40 + (Math.random() * (Math.max(140, H * 0.50) - 90));
+              vx0 = - (0.55 + Math.random() * 0.45);
+              vy0 = (Math.random() - 0.5) * 0.20;
+            }
+
             makeBubble(nf, 2 + Math.floor(Math.random() * Math.max(1, MAX-4)), {
-              x: rx,
+              x: spawnX,
               y: spawnY,
-              // gentle drift
-              vx: (Math.random() - 0.5) * 0.8,
-              // fall speed: slow but clearly visible
-              vy: 3.0 + Math.random() * 1.2,
-              // air resistance for a softer fall (but not stuck)
-              air: 0.04,
+              // initial velocity pushes into viewport
+              vx: vx0,
+              vy: vy0,
+              // air resistance for a softer motion (very slow leak-in)
+              air: 0.10,
               fadeIn: true
             });
           }
         }, 5000);
       }
+
+      // gravity direction: auto tilt | manual sliders | off
+      let tiltCleanup = null;
+      try {
+        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+        const map = (deg) => clamp((deg || 0) / 35, -1, 1);
+
+        const applyManual = () => {
+          // map [-100..100] to [-1..1]
+          const gx = clamp((tiltX || 0) / 100, -1, 1);
+          const gy = clamp((tiltY || 0) / 100, -1, 1);
+          engine.gravity.x = gx;
+          engine.gravity.y = gy;
+        };
+
+        if (tiltMode === 'off') {
+          // keep default gravity
+        } else if (tiltMode === 'manual') {
+          applyManual();
+        } else {
+          // auto
+          if (isMobileLike() && window.DeviceOrientationEvent) {
+            const handler = (ev) => {
+              const gx = map(ev.gamma);
+              const gy = map(ev.beta);
+              engine.gravity.x = gx * 0.9;
+              engine.gravity.y = gy * 0.9;
+            };
+
+            const attach = () => {
+              window.addEventListener('deviceorientation', handler, true);
+              tiltCleanup = () => {
+                try { window.removeEventListener('deviceorientation', handler, true); } catch {}
+              };
+            };
+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+              const onFirst = async () => {
+                try {
+                  const st = await DeviceOrientationEvent.requestPermission();
+                  if (st === 'granted') attach();
+                } catch {}
+                try { window.removeEventListener('click', onFirst, true); } catch {}
+                try { window.removeEventListener('touchend', onFirst, true); } catch {}
+              };
+              window.addEventListener('click', onFirst, true);
+              window.addEventListener('touchend', onFirst, true);
+              tiltCleanup = () => {
+                try { window.removeEventListener('click', onFirst, true); } catch {}
+                try { window.removeEventListener('touchend', onFirst, true); } catch {}
+                try { window.removeEventListener('deviceorientation', handler, true); } catch {}
+              };
+            } else {
+              attach();
+            }
+          } else {
+            // auto requested but not available (http on iOS, desktop, etc.)
+            // fallback to manual so user still gets an effect
+            try {
+              tiltMode = 'manual';
+              localStorage.setItem('gallery_tilt_mode', 'manual');
+              syncTiltUI();
+            } catch {}
+            applyManual();
+          }
+        }
+      } catch {}
 
       // render loop (throttled + GPU-friendly transforms)
       let rafId = 0;
@@ -1700,6 +1873,7 @@
         try { if (kickInt) clearInterval(kickInt); } catch {}
         try { if (swapInt) clearInterval(swapInt); } catch {}
         try { if (rafId) cancelAnimationFrame(rafId); } catch {}
+        try { if (tiltCleanup) tiltCleanup(); } catch {}
         try { Runner.stop(runner); } catch {}
         try { Matter.Engine.clear(engine); } catch {}
         try { stage.remove(); } catch {}

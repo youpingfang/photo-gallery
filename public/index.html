@@ -147,6 +147,24 @@
             <input id="bubbleCount" type="number" min="5" max="80" step="1" value="25" style="width:120px;min-width:120px;" />
           </div>
 
+          <div class="setRow" id="tiltWrap" style="display:none;">
+            <div class="setLabel">重力方向</div>
+            <select id="tiltMode" class="sel" style="width:180px;">
+              <option value="auto">自动（手机倾斜）</option>
+              <option value="manual">手动（滑杆）</option>
+              <option value="off">关闭</option>
+            </select>
+          </div>
+
+          <div class="setRow" id="tiltManualWrap" style="display:none;">
+            <div class="setLabel">横向重力</div>
+            <input id="tiltX" type="range" min="-100" max="100" step="1" value="0" style="width:180px;" />
+          </div>
+          <div class="setRow" id="tiltManualWrap2" style="display:none;">
+            <div class="setLabel">纵向重力</div>
+            <input id="tiltY" type="range" min="-100" max="100" step="1" value="35" style="width:180px;" />
+          </div>
+
           <div class="setRow" id="collageHint" style="display:none;">
             <div class="setLabel">拼贴</div>
             <div class="setHelp">10格随机轮播，每格每 5 秒自动换图。</div>
