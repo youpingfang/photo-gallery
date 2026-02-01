@@ -872,6 +872,51 @@
   // show initially then hide
   showFab();
 
+  // Mobile fallback: keep FAB visually fixed by converting to absolute + syncing top on scroll.
+  // Some browsers (and some iOS modes) don't reliably keep position:fixed during programmatic scrolling.
+  (function(){
+    const fab = $('fab');
+    if (!fab) return;
+    const ua = (navigator.userAgent || '');
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAlook = /Alook/i.test(ua);
+    if (!isMobileLike() || (!isIOS && !isAlook)) return;
+
+    let raf = 0;
+    const tick = () => {
+      const bottom = 88 + (window.safeAreaInsetBottom || 0);
+      const vh = window.innerHeight || 800;
+      const top = (window.scrollY || window.pageYOffset || 0) + vh - bottom - fab.offsetHeight;
+      try {
+        document.body.classList.add('fabAbs');
+        fab.style.top = Math.max(12, Math.floor(top)) + 'px';
+        fab.style.right = '14px';
+      } catch {}
+      raf = requestAnimationFrame(tick);
+    };
+
+    // Start a loop only while in masonry mode (when scrolling is relevant)
+    const start = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      if (!raf) return;
+      try { cancelAnimationFrame(raf); } catch {}
+      raf = 0;
+      try { document.body.classList.remove('fabAbs'); fab.style.top = ''; } catch {}
+    };
+
+    // hook into mode changes by observing body class
+    const mo = new MutationObserver(() => {
+      if (document.body.classList.contains('modeMasonry')) start();
+      else stop();
+    });
+    try { mo.observe(document.body, { attributes:true, attributeFilter:['class'] }); } catch {}
+    // initial
+    if (document.body.classList.contains('modeMasonry')) start();
+  })();
+
   // settings modal toggle
   const settings = $('settings');
   function isAdminUnlocked(){
@@ -2085,6 +2130,112 @@
 
     $('content').appendChild(gridEl);
     mountSentinel();
+
+    // masonry screensaver auto-scroll: 20s per screen; pause while touching; seamless loop
+    try {
+      const reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (!reduced && viewMode === 'masonry') {
+        try { window.scrollTo(0, 0); } catch {}
+
+        // cancel previous
+        try { if (window.__masonryAutoStop) window.__masonryAutoStop(); } catch {}
+
+        let running = true;
+        let paused = false;
+        let raf = 0;
+        let last = 0;
+        let loopH = 0;
+
+        // Create a second copy of the grid so we can wrap scrollY without a visible jump.
+        // Important: we rebuild tiles (cloneNode would lose event listeners).
+        const gridEl2 = document.createElement('div');
+        gridEl2.className = 'grid';
+        for (let i=0;i<currentFiles.length;i++) {
+          gridEl2.appendChild(makeTile(i, currentFiles[i], totalCount));
+        }
+        $('content').appendChild(gridEl2);
+
+        const measureLoopH = () => {
+          try {
+            loopH = gridEl.getBoundingClientRect().height || gridEl.offsetHeight || 0;
+          } catch { loopH = 0; }
+        };
+        // measure after layout
+        setTimeout(measureLoopH, 60);
+        requestAnimationFrame(measureLoopH);
+
+        const stop = () => {
+          if (!running) return;
+          running = false;
+          try { if (raf) cancelAnimationFrame(raf); } catch {}
+          cleanup();
+        };
+        const onPress = () => { paused = true; };
+        const onRelease = () => { paused = false; };
+
+        // wheel/keyboard: pause briefly then resume (still "screensaver" feel)
+        let wheelTimer = 0;
+        const onWheel = () => {
+          paused = true;
+          try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
+          wheelTimer = setTimeout(() => { paused = false; }, 900);
+        };
+        const onKey = () => {
+          paused = true;
+          try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
+          wheelTimer = setTimeout(() => { paused = false; }, 1200);
+        };
+
+        const cleanup = () => {
+          try { window.removeEventListener('pointerdown', onPress, { capture:true }); } catch {}
+          try { window.removeEventListener('pointerup', onRelease, { capture:true }); } catch {}
+          try { window.removeEventListener('touchstart', onPress, { capture:true }); } catch {}
+          try { window.removeEventListener('touchend', onRelease, { capture:true }); } catch {}
+          try { window.removeEventListener('touchcancel', onRelease, { capture:true }); } catch {}
+          try { window.removeEventListener('wheel', onWheel, { capture:true }); } catch {}
+          try { window.removeEventListener('keydown', onKey, { capture:true }); } catch {}
+          try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
+          try { window.__masonryAutoStop = null; } catch {}
+        };
+
+        window.addEventListener('pointerdown', onPress, { capture:true, passive:true });
+        window.addEventListener('pointerup', onRelease, { capture:true, passive:true });
+        window.addEventListener('touchstart', onPress, { capture:true, passive:true });
+        window.addEventListener('touchend', onRelease, { capture:true, passive:true });
+        window.addEventListener('touchcancel', onRelease, { capture:true, passive:true });
+        window.addEventListener('wheel', onWheel, { capture:true, passive:true });
+        window.addEventListener('keydown', onKey, { capture:true });
+
+        window.__masonryAutoStop = stop;
+
+        const step = (ts) => {
+          if (!running) return;
+          raf = requestAnimationFrame(step);
+          if (paused) { last = ts; return; }
+          if (!last) last = ts;
+          const dt = Math.min(64, ts - last);
+          last = ts;
+
+          const vh = Math.max(200, window.innerHeight || 800);
+          const pxPerSec = vh / 20; // 20s per screen
+          const dy = (pxPerSec * dt) / 1000;
+
+          const y = window.scrollY || window.pageYOffset || 0;
+          // wrap when we've scrolled past the first copy
+          if (loopH > 0 && y >= loopH) {
+            // This should be visually seamless because content repeats.
+            try { window.scrollTo(0, y - loopH); } catch {}
+          }
+
+          window.scrollBy(0, dy);
+        };
+
+        requestAnimationFrame((t) => {
+          last = t;
+          raf = requestAnimationFrame(step);
+        });
+      }
+    } catch {}
   }
 
   // initial load (wait a tick to ensure DOM is ready)

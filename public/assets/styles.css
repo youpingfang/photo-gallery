@@ -202,11 +202,21 @@ button:active{ transform: translateY(1px); }
 input{ background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.12); color:var(--text); border-radius:var(--r-sm); padding:10px 12px; min-width:240px; outline:none; }
 
 /* floating action buttons */
-.fab{ position:fixed; right:14px; bottom:88px; display:flex; flex-direction:column; gap:10px; z-index:30; transition: opacity .25s ease, transform .25s ease; }
+.fab{ position:fixed; right:14px; bottom:calc(88px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:10px; z-index:30; transition: opacity .25s ease, transform .25s ease;
+  /* iOS Safari: keep fixed FAB from behaving like absolute while scrolling */
+  transform: translate3d(0,0,0);
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+}
 body.fabHidden .fab{ opacity:0; pointer-events:none; transform: translateY(8px); }
 body.fabHidden .themeTop{ opacity:0; pointer-events:none; transform: translateY(-6px); }
 body.immersive .fab #uploadBtn{ display:none; }
 body.immersive .fab{ left:50%; right:auto; bottom:18px; transform:translateX(-50%); }
+
+/* Fallback for some mobile browsers where position:fixed behaves like absolute while scrolling:
+   we pin the FAB by computing an absolute top in JS. */
+body.fabAbs .fab{ position:absolute; bottom:auto; }
+
 body.immersive .themeTop{ opacity:0; pointer-events:none; }
 body.immersive .fab button{ width:56px; height:56px; border-radius:var(--r-md); font-size:30px; }
 .fab button{ width:46px; height:46px; padding:0; display:grid; place-items:center; border-radius:var(--r-sm);
@@ -271,7 +281,11 @@ body.themeLight #modeQuick{ color: rgba(12,18,34,.78); }
 /* lightbox */
 .lb{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,.25); display:none; align-items:center; justify-content:center; padding:10px; overscroll-behavior:contain; touch-action: pan-x pan-y pinch-zoom; backdrop-filter: blur(10px); transform:translateZ(0); }
 .lb.open{ display:flex; }
-.lb-inner{ width:100%; max-width:min(1400px, 100vw); height:min(96vh, 980px); }
+.lb-inner{ width:100%; max-width:min(1400px, 100vw);
+  /* iOS Safari: prefer dynamic viewport units so the modal doesn't shift when the address bar changes */
+  height: min(96dvh, 980px);
+  height: min(96svh, 980px);
+}
 .lb-stage{ height:100%; display:grid; grid-template-rows: 4fr 1fr; gap:10px; min-height:0; }
 .mainWrap{ position:relative; min-height:0; border-radius:var(--r-lg); overflow:hidden; background:transparent; box-shadow:0 18px 50px rgba(0,0,0,.35); padding:0; border:1px solid rgba(255,255,255,.10); touch-action: none; }
 /* Prevent browser back/forward swipe from edges while in lightbox */
