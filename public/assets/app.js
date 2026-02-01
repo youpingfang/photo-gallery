@@ -1192,9 +1192,24 @@
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
     const headers = { 'Content-Type':'application/json' };
-    // Delete is only supported for local library
+
     const pub = await fetchPublicCfg();
-    if (pub && pub.publicSource === 'immich') { alert('当前公开源为 Immich，相册不支持删除；请先切回本地（/images）再删除。'); return; }
+    if (pub && pub.publicSource === 'immich') {
+      // Immich delete: ids are stored in tile name for immich assets
+      const r = await apiFetch('/api/immich/delete', {
+        method:'POST',
+        headers,
+        body: JSON.stringify({ ids: names })
+      });
+      const j = await r.json();
+      // reload
+      exitSelectMode();
+      await load(currentDir);
+      if (j.failed && j.failed.length) alert('部分删除失败：' + j.failed.length);
+      return;
+    }
+
+    // Local delete
     const url = '/api/delete?dir=' + encodeURIComponent(currentDir);
     const r = await apiFetch(url, {
       method:'POST',
@@ -1209,8 +1224,22 @@
   });
 
   // upload
-  on('uploadBtn','click', () => { if ($('file')) $('file').click(); });
-  on('uploadInSettings','click', () => { if ($('file')) $('file').click(); });
+  function promptAdminForUpload(){
+    if (isAdminUnlocked()) return true;
+    alert('请先解锁管理密码');
+    try { openSettings(); } catch {}
+    try { if ($('adminPass')) $('adminPass').focus(); } catch {}
+    return false;
+  }
+
+  on('uploadBtn','click', () => {
+    if (!promptAdminForUpload()) return;
+    if ($('file')) $('file').click();
+  });
+  on('uploadInSettings','click', () => {
+    if (!promptAdminForUpload()) return;
+    if ($('file')) $('file').click();
+  });
   on('file','change', async (e) => {
     const files = e.target.files;
     if (!files || !files.length) return;
@@ -1218,13 +1247,28 @@
     for (const f of files) fd.append('files', f, f.name);
     if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
-    // Upload always goes to local library (/images)
-    // Even when public source is Immich, we allow uploading to local for convenience.
-    const url = '/api/upload?dir=' + encodeURIComponent(currentDir);
-    await apiFetch(url, {
-      method:'POST',
-      body: fd
-    });
+    const pub = await fetchPublicCfg();
+
+    // Upload routing:
+    // - local source -> /api/upload
+    // - immich source -> /api/immich/upload (into the configured public album)
+    if (pub && pub.publicSource === 'immich') {
+      const r = await apiFetch('/api/immich/upload', {
+        method:'POST',
+        body: fd
+      });
+      // surface errors
+      try {
+        const j = await r.json();
+        if (j && j.failed && j.failed.length) alert('部分上传失败：' + j.failed.length);
+      } catch {}
+    } else {
+      const url = '/api/upload?dir=' + encodeURIComponent(currentDir);
+      await apiFetch(url, {
+        method:'POST',
+        body: fd
+      });
+    }
     if ($('file')) $('file').value = '';
     await load(currentDir);
   });

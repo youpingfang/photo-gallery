@@ -235,6 +235,15 @@ const upload = multer({
   }
 });
 
+// For Immich upload: keep files in memory, then forward to Immich API
+const uploadMem = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+    files: 50
+  }
+});
+
 app.post('/api/upload', upload.array('files', 50), async (req, res) => {
   if (!requireAdmin(req, res)) return;
 
@@ -542,6 +551,21 @@ async function immichJson(path){
   return r.json();
 }
 
+async function immichFetch(path, opts = {}){
+  const url = IMMICH_URL.replace(/\/+$/,'') + path;
+  const headers = Object.assign({}, immichHeaders(), (opts.headers || {}));
+  const r = await fetch(url, Object.assign({}, opts, { headers }));
+  return r;
+}
+
+async function immichFetchJson(path, opts = {}){
+  const r = await immichFetch(path, opts);
+  const text = await r.text();
+  let j = null;
+  try { j = text ? JSON.parse(text) : null; } catch {}
+  return { ok: r.ok, status: r.status, text, json: j };
+}
+
 async function immichStreamAny(res, candidates){
   // candidates: [{path, accept}]
   for (const c of candidates) {
@@ -655,6 +679,130 @@ app.get('/api/immich/file', async (req, res) => {
     { path: `/api/assets/${encodeURIComponent(id)}/download`, accept:'*/*' },
     { path: `/api/asset/file/${encodeURIComponent(id)}`, accept:'*/*' },
   ]);
+});
+
+async function immichAddAssetsToAlbum(albumId, assetIds){
+  const ids = (assetIds || []).filter(Boolean).map(String);
+  if (!albumId || !ids.length) return { ok:false, status:400, text:'missing albumId/ids' };
+
+  // Try a few Immich API shapes (version differences)
+  const payload = JSON.stringify({ ids });
+  const candidates = [
+    { method:'PUT', path:`/api/albums/${encodeURIComponent(albumId)}/assets` },
+    { method:'POST', path:`/api/albums/${encodeURIComponent(albumId)}/assets` },
+    { method:'PATCH', path:`/api/albums/${encodeURIComponent(albumId)}/assets` },
+  ];
+
+  let last = null;
+  for (const c of candidates) {
+    const r = await immichFetchJson(c.path, {
+      method: c.method,
+      headers: { 'Content-Type':'application/json' },
+      body: payload
+    });
+    last = r;
+    if (r.ok) return r;
+  }
+  return last || { ok:false, status:500, text:'unknown' };
+}
+
+// Admin: upload to Immich + add into current configured album (or specified albumId)
+app.post('/api/immich/upload', uploadMem.array('files', 50), async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+
+  const cfg = loadGalleryCfg();
+  const albumId = ((req.query.albumId || '').toString() || (cfg.immichAlbumId || '').toString()).trim();
+  if (!albumId) return res.status(400).json({ error:'missing album id' });
+
+  const files = (req.files || []);
+  if (!files.length) return res.status(400).json({ error:'no files' });
+
+  const uploaded = [];
+  const failed = [];
+
+  for (const f of files) {
+    try {
+      const form = new FormData();
+      // Common Immich required fields
+      form.set('deviceAssetId', crypto.randomUUID());
+      form.set('deviceId', 'photo-gallery');
+      const now = new Date().toISOString();
+      form.set('fileCreatedAt', now);
+      form.set('fileModifiedAt', now);
+      form.set('isFavorite', 'false');
+
+      // File field name differs across versions; try assetData first.
+      const blob = new Blob([f.buffer], { type: f.mimetype || 'application/octet-stream' });
+      form.set('assetData', blob, f.originalname || 'upload');
+
+      let r = await immichFetchJson('/api/assets', { method:'POST', body: form });
+
+      // Fallback: some builds expect "file" instead of "assetData"
+      if (!r.ok) {
+        const form2 = new FormData();
+        form2.set('deviceAssetId', crypto.randomUUID());
+        form2.set('deviceId', 'photo-gallery');
+        form2.set('fileCreatedAt', now);
+        form2.set('fileModifiedAt', now);
+        form2.set('isFavorite', 'false');
+        form2.set('file', blob, f.originalname || 'upload');
+        r = await immichFetchJson('/api/assets', { method:'POST', body: form2 });
+      }
+
+      if (!r.ok) {
+        failed.push({ name: f.originalname, error: `upload failed (${r.status})`, detail: r.json || r.text });
+        continue;
+      }
+
+      const assetId = (r.json && (r.json.id || r.json.assetId)) ? String(r.json.id || r.json.assetId) : null;
+      if (!assetId) {
+        failed.push({ name: f.originalname, error: 'upload ok but missing asset id', detail: r.json || r.text });
+        continue;
+      }
+
+      const add = await immichAddAssetsToAlbum(albumId, [assetId]);
+      if (!add.ok) {
+        failed.push({ name: f.originalname, assetId, error: `add-to-album failed (${add.status})`, detail: add.json || add.text });
+        continue;
+      }
+
+      uploaded.push({ name: f.originalname, assetId });
+    } catch (e) {
+      failed.push({ name: f.originalname, error: String(e) });
+    }
+  }
+
+  res.json({ ok: failed.length === 0, uploaded, failed });
+});
+
+// Admin: delete assets from Immich (irreversible)
+app.post('/api/immich/delete', express.json({ limit:'1mb' }), async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  if (!immichCfgOk()) return res.status(400).json({ error:'immich not configured' });
+
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter(Boolean) : [];
+  if (!ids.length) return res.status(400).json({ error:'missing ids' });
+
+  // Try bulk delete first
+  let bulk = await immichFetchJson('/api/assets', {
+    method: 'DELETE',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ ids })
+  });
+
+  if (bulk.ok) return res.json({ ok:true, deleted: ids, failed: [] });
+
+  // Fallback: delete one-by-one
+  const deleted = [];
+  const failed = [];
+  for (const id of ids) {
+    const r = await immichFetchJson(`/api/assets/${encodeURIComponent(id)}`, { method:'DELETE' });
+    if (r.ok) deleted.push(id);
+    else failed.push({ id, error: `delete failed (${r.status})`, detail: r.json || r.text });
+  }
+
+  res.json({ ok: failed.length === 0, deleted, failed, bulkError: bulk.json || bulk.text, bulkStatus: bulk.status });
 });
 
 // --- WebDAV endpoints removed ---
