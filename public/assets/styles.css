@@ -123,7 +123,16 @@ body.autoCols .grid{ column-count: 4; column-width:auto; }
 @media (max-width: 680px){ body.autoCols .grid{ column-count:2; } }
 @media (min-width: 1400px){ body.autoCols .grid{ column-count:5; } }
 
-.tile{ display:block; width:100%; margin:0 0 3px; background:transparent; border:0; border-radius:var(--r-sm); overflow:hidden; cursor:pointer; break-inside:avoid; position:relative; aspect-ratio:4/5; }
+.tile{ display:block; width:100%; margin:0 0 3px; background:transparent; border:0; border-radius:var(--r-sm); overflow:hidden; cursor:pointer; break-inside:avoid; position:relative; aspect-ratio:4/5;
+  -webkit-touch-callout:none;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-user-drag:none;
+  touch-action: manipulation;
+}
+.tile img{ -webkit-user-drag:none; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; }
+.cTile, .cTile img, .bubbleTile, .bubbleTile img{ -webkit-touch-callout:none; -webkit-user-select:none; user-select:none; -webkit-user-drag:none; touch-action: manipulation; }
+
 .tile.r1{ aspect-ratio:1/1; }
 .tile.r2{ aspect-ratio:4/5; }
 .tile.r3{ aspect-ratio:3/4; }
@@ -187,6 +196,12 @@ body.likeOff .likeBtn{ display:none !important; }
 
 .check{ position:absolute; top:8px; left:8px; width:26px; height:26px; border-radius:12px; background:rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.18); display:none; align-items:center; justify-content:center; color:#fff; font-weight:900; z-index: 3; }
 .tile.sel .check{ display:flex; }
+.bubbleTile.sel .check{ display:flex; }
+.cTile.sel .check{ display:flex; }
+
+.bubbleTile.sel{ outline:2px solid rgba(110,168,254,.9); outline-offset:-2px; }
+.cTile.sel{ outline:2px solid rgba(110,168,254,.9); outline-offset:-2px; }
+
 
 /* action bar */
 .actionBar{ position:fixed; left:14px; right:14px; bottom:16px; z-index:40; display:none; gap:10px; align-items:center; justify-content:space-between; padding:12px; background: rgba(18,24,40,.78); border:1px solid rgba(255,255,255,.10); border-radius:var(--r-md); backdrop-filter: blur(10px); }

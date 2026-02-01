@@ -202,6 +202,7 @@
     });
   }
 
+  const selectableSelector = '.tile[data-name], .bubbleTile[data-name], .cTile[data-name]';
   function updateActionBar(){
     const bar = $('actionBar');
     const n = selected.size;
@@ -209,7 +210,7 @@
     if (selectMode) bar.classList.add('show');
     else bar.classList.remove('show');
 
-    const total = document.querySelectorAll('.tile[data-name]').length;
+    const total = document.querySelectorAll(selectableSelector).length;
     const btn = $('toggleAll');
     if (btn) btn.textContent = (total > 0 && n >= total) ? '取消全选' : '全选';
   }
@@ -224,7 +225,7 @@
   function exitSelectMode(){
     selectMode = false;
     selected.clear();
-    document.querySelectorAll('.tile.sel').forEach(t => t.classList.remove('sel'));
+    document.querySelectorAll(selectableSelector + '.sel').forEach(t => t.classList.remove('sel'));
     updateActionBar();
     // resume masonry screensaver after leaving selection mode
     try { if (window.__masonryAutoPause) window.__masonryAutoPause(false); } catch {}
@@ -239,7 +240,7 @@
   }
 
   function selectAll(){
-    document.querySelectorAll('.tile[data-name]').forEach(t => {
+    document.querySelectorAll(selectableSelector).forEach(t => {
       const n = t.getAttribute('data-name');
       if (!n) return;
       selected.add(n);
@@ -250,7 +251,7 @@
 
   function clearAll(){
     selected.clear();
-    document.querySelectorAll('.tile.sel').forEach(t => t.classList.remove('sel'));
+    document.querySelectorAll(selectableSelector + '.sel').forEach(t => t.classList.remove('sel'));
     updateActionBar();
   }
 
@@ -362,10 +363,15 @@
 
     // long-press on mobile enters select
     let lp = null;
-    tile.addEventListener('touchstart', () => {
-      if (selectMode) return;
+    tile.addEventListener('touchstart', (e) => {
+      if (selectMode) {
+        // In selection mode, tap selects/deselects. Prevent default to avoid browser callout.
+        try { e.preventDefault(); } catch {}
+        toggleSelect(f.name, tile);
+        return;
+      }
       lp = setTimeout(() => { enterSelectMode(); toggleSelect(f.name, tile, true); }, 420);
-    }, { passive:true });
+    }, { passive:false });
     tile.addEventListener('touchend', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
     tile.addEventListener('touchmove', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
 
@@ -375,6 +381,9 @@
       if (!selectMode) enterSelectMode();
       toggleSelect(f.name, tile);
     });
+
+    // also block iOS/Android long-press context menu on the tile
+    tile.addEventListener('dragstart', (e) => { try { e.preventDefault(); } catch {} });
 
     return tile;
   }
@@ -467,6 +476,9 @@
   let apFrom = 0;
   let autoplayEnabled = false;
   let autoplayRunning = false;
+  // Autoplay duration per image. Requirement: start counting only after full-res is ready,
+  // and keep each image for 5 seconds.
+  let autoplayMsOverride = 5000;
 
   function apSet(p){
     const bar = $('apProgBar');
@@ -482,7 +494,8 @@
     const tick = () => {
       if (!autoplayEnabled || !autoplayRunning || !$('lb').classList.contains('open')) { apStop(); return; }
       if (!apFrom) { apSet(0); apRaf = requestAnimationFrame(tick); return; }
-      const p = (performance.now() - apFrom) / AUTOPLAY_MS;
+      const dur = (autoplayEnabled && autoplayRunning && autoplayMsOverride) ? autoplayMsOverride : AUTOPLAY_MS;
+      const p = (performance.now() - apFrom) / dur;
       if (p >= 1) {
         apSet(1);
         apFrom = 0;
@@ -497,20 +510,78 @@
 
   // updateMetaOverlay removed (shooting info feature removed)
 
+  // Full-res preload cache (url -> Promise)
+  const fullCache = new Map();
+  function preloadFull(url){
+    const u = String(url || '');
+    if (!u) return Promise.reject(new Error('missing url'));
+    if (fullCache.has(u)) return fullCache.get(u);
+    const p = new Promise((resolve, reject) => {
+      try {
+        const img = new Image();
+        img.decoding = 'async';
+        img.onload = () => resolve(u);
+        img.onerror = () => reject(new Error('preload failed'));
+        img.src = u;
+      } catch (e) {
+        reject(e);
+      }
+    });
+    fullCache.set(u, p);
+    return p;
+  }
+
+  function preloadNextFull(){
+    try {
+      if (!currentFiles.length) return;
+      const nextIdx = (currentIndex + 1) % currentFiles.length;
+      const nf = currentFiles[nextIdx];
+      if (nf && nf.url) preloadFull(nf.url).catch(() => {});
+    } catch {}
+  }
+
+  async function ensureFullResAndStartTimer(imgEl){
+    try {
+      const fullUrl = imgEl?.dataset?.fullUrl || '';
+      if (!fullUrl) return;
+
+      // already full-res
+      if (imgEl.src === fullUrl || imgEl?.dataset?.fullReady === '1') {
+        if (autoplayEnabled && autoplayRunning) apStartShown();
+        preloadNextFull();
+        return;
+      }
+
+      await preloadFull(fullUrl);
+      const active = getActiveImg();
+      if (active === imgEl) {
+        imgEl.src = fullUrl;
+        try { imgEl.dataset.fullReady = '1'; } catch {}
+        if (autoplayEnabled && autoplayRunning) apStartShown();
+      }
+      preloadNextFull();
+    } catch {
+      // fallback: start after thumb is shown
+      if (autoplayEnabled && autoplayRunning) apStartShown();
+      preloadNextFull();
+    }
+  }
+
   function ensureFullRes(imgEl){
     try {
       const fullUrl = imgEl?.dataset?.fullUrl || '';
       if (!fullUrl) return;
-      if (imgEl.src === fullUrl) return;
-      // begin upgrade
-      const full = new Image();
-      full.decoding = 'async';
-      full.src = fullUrl;
-      full.onload = () => {
-        // only upgrade if still showing same image
+      if (imgEl.src === fullUrl) {
+        try { imgEl.dataset.fullReady = '1'; } catch {}
+        return;
+      }
+      preloadFull(fullUrl).then(() => {
         const active = getActiveImg();
-        if (active === imgEl) imgEl.src = fullUrl;
-      };
+        if (active === imgEl) {
+          imgEl.src = fullUrl;
+          try { imgEl.dataset.fullReady = '1'; } catch {}
+        }
+      }).catch(() => {});
     } catch {}
   }
 
@@ -557,9 +628,16 @@
       nextImg.addEventListener('load', () => {
         swapActiveImg(nextImg);
         resetZoom();
-        // after showing thumb, upgrade to full-res in background
-        ensureFullRes(nextImg);
-        if (autoplayEnabled && autoplayRunning) apStartShown();
+        // after showing thumb, upgrade to full-res.
+        // autoplay timer starts only AFTER full-res is ready.
+        if (autoplayEnabled && autoplayRunning) {
+          apFrom = 0;
+          apSet(0);
+          ensureFullResAndStartTimer(nextImg);
+        } else {
+          ensureFullRes(nextImg);
+          preloadNextFull();
+        }
       }, { once:true });
 
       nextImg.src = thumbUrl;
@@ -569,8 +647,20 @@
       if (autoplayEnabled && autoplayRunning) {
         apFrom = 0; apSet(0);
         const img2 = getActiveImg();
-        if (img2 && img2.complete && img2.naturalWidth > 0) apStartShown();
-        else if (img2) img2.addEventListener('load', () => apStartShown(), { once:true });
+        if (img2) {
+          // src is already full here; start timer after it actually loads
+          if (img2.complete && img2.naturalWidth > 0) {
+            try { img2.dataset.fullReady = '1'; } catch {}
+            apStartShown();
+            preloadNextFull();
+          } else {
+            img2.addEventListener('load', () => {
+              try { img2.dataset.fullReady = '1'; } catch {}
+              apStartShown();
+              preloadNextFull();
+            }, { once:true });
+          }
+        }
       }
     }
 
@@ -664,8 +754,17 @@
     apLoop();
 
     const img = getActiveImg();
-    if (img && img.complete && img.naturalWidth > 0) apStartShown();
-    else if (img) img.addEventListener('load', () => apStartShown(), { once:true });
+    if (img && img.complete && img.naturalWidth > 0) {
+      // if we are already on full-res, start; otherwise wait for full-res upgrade
+      if (img.dataset && img.dataset.fullUrl && img.src !== img.dataset.fullUrl) ensureFullResAndStartTimer(img);
+      else apStartShown();
+      preloadNextFull();
+    } else if (img) {
+      img.addEventListener('load', () => {
+        // after first show (thumb or full), ensure full-res then start timer
+        ensureFullResAndStartTimer(img);
+      }, { once:true });
+    }
 
     const btn = $('playPref');
     if (btn) btn.style.display = 'none';
@@ -1339,10 +1438,20 @@
     }
   }
 
+  // global: block context menu on selectable tiles (Alook/Android long-press menu)
+  document.addEventListener('contextmenu', (e) => {
+    try {
+      const t = e && e.target;
+      if (t && t.closest && t.closest(selectableSelector)) {
+        e.preventDefault();
+      }
+    } catch {}
+  }, true);
+
   // delete actions
   on('toggleAll','click', (e) => {
     e.preventDefault();
-    const total = document.querySelectorAll('.tile[data-name]').length;
+    const total = document.querySelectorAll(selectableSelector).length;
     if (selected.size >= total && total > 0) clearAll();
     else selectAll();
   });
@@ -1721,6 +1830,9 @@
         img.alt = f.name;
         el.appendChild(img);
 
+        // selection check
+        el.insertAdjacentHTML('afterbegin', '<div class="check">✓</div>');
+
         // like overlay
         if (likeEnabled) {
           const likeWrap = document.createElement('div');
@@ -1748,10 +1860,28 @@
           setLikeUI(el, f.name);
         }
 
-        el.addEventListener('click', () => {
+        el.addEventListener('click', (e) => {
+          if (selectMode) { e.preventDefault(); e.stopPropagation(); toggleSelect(f.name, el); return; }
           const idx = currentFiles.findIndex(x => x.name === f.name);
           openLb(Math.max(0, idx));
         });
+
+        // long-press on mobile enters select
+        let lp = null;
+        el.addEventListener('touchstart', (e) => {
+          if (selectMode) {
+            try { e.preventDefault(); } catch {}
+            toggleSelect(f.name, el);
+            return;
+          }
+          lp = setTimeout(() => { enterSelectMode(); toggleSelect(f.name, el, true); }, 420);
+        }, { passive:false });
+        el.addEventListener('touchend', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
+        el.addEventListener('touchmove', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
+
+        // block long-press menu
+        el.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch {} });
+        el.addEventListener('dragstart', (e) => { try { e.preventDefault(); } catch {} });
 
         // optional fade-in (used for "rain" new tiles)
         const fadeInPending = !!opts.fadeIn;
@@ -2103,7 +2233,8 @@
           if (r < 0.22) t.classList.add('circle');
         }
         // double-buffered images for smooth crossfade
-        t.innerHTML = '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />' +
+        t.innerHTML = '<div class="check">✓</div>' +
+          '<img class="cImg a on" alt="" /><img class="cImg b" alt="" />' +
           '<div class="likeBtn" role="button" aria-label="点赞"><span class="heart">❤</span><span class="count">0</span></div>';
         const f = pickNext('');
         setTileImg(t, f);
@@ -2134,11 +2265,33 @@
         const n0 = t.getAttribute('data-name') || '';
         if (n0) setLikeUI(t, n0);
 
-        t.addEventListener('click', () => {
+        t.addEventListener('click', (e) => {
           const name = t.getAttribute('data-name') || '';
+          if (selectMode) { e.preventDefault(); e.stopPropagation(); toggleSelect(name, t); return; }
           const idx = currentFiles.findIndex(x => x.name === name);
           openLb(Math.max(0, idx));
         });
+
+        // long-press on mobile enters select
+        let lp = null;
+        t.addEventListener('touchstart', (e) => {
+          const name = t.getAttribute('data-name') || '';
+          if (selectMode) {
+            try { e.preventDefault(); } catch {}
+            toggleSelect(name, t);
+            return;
+          }
+          lp = setTimeout(() => {
+            enterSelectMode();
+            toggleSelect(name, t, true);
+          }, 420);
+        }, { passive:false });
+        t.addEventListener('touchend', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
+        t.addEventListener('touchmove', () => { if (lp) clearTimeout(lp); lp = null; }, { passive:true });
+
+        // block long-press menu
+        t.addEventListener('contextmenu', (e) => { try { e.preventDefault(); } catch {} });
+        t.addEventListener('dragstart', (e) => { try { e.preventDefault(); } catch {} });
         // initial frame
         try {
           const frames = ['frame1','frame2','frame3','frame4'];
@@ -2234,6 +2387,7 @@
 
         let running = true;
         let paused = false;
+        let pauseLock = false; // external pause (e.g. delete/select mode)
         let raf = 0;
         let last = 0;
         let loopH = 0;
@@ -2263,19 +2417,19 @@
           cleanup();
         };
         const onPress = () => { paused = true; };
-        const onRelease = () => { paused = false; };
+        const onRelease = () => { if (!pauseLock) paused = false; };
 
         // wheel/keyboard: pause briefly then resume (still "screensaver" feel)
         let wheelTimer = 0;
         const onWheel = () => {
           paused = true;
           try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
-          wheelTimer = setTimeout(() => { paused = false; }, 900);
+          wheelTimer = setTimeout(() => { if (!pauseLock) paused = false; }, 900);
         };
         const onKey = () => {
           paused = true;
           try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
-          wheelTimer = setTimeout(() => { paused = false; }, 1200);
+          wheelTimer = setTimeout(() => { if (!pauseLock) paused = false; }, 1200);
         };
 
         const cleanup = () => {
@@ -2300,12 +2454,16 @@
         window.addEventListener('keydown', onKey, { capture:true });
 
         window.__masonryAutoStop = stop;
-        window.__masonryAutoPause = (p) => { paused = !!p; };
+        window.__masonryAutoPause = (p) => {
+          pauseLock = !!p;
+          if (pauseLock) paused = true;
+          else paused = false;
+        };
 
         const step = (ts) => {
           if (!running) return;
           raf = requestAnimationFrame(step);
-          if (paused) { last = ts; return; }
+          if (paused || pauseLock) { last = ts; return; }
           if (!last) last = ts;
           const dt = Math.min(64, ts - last);
           last = ts;
