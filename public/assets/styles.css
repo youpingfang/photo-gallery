@@ -278,6 +278,58 @@ body.themeLight #modeQuick{ color: rgba(12,18,34,.78); }
 
 #themeQuick{ font-size:12px; letter-spacing:.2px; width:52px; height:52px; line-height:1; }
 
+/* modal confirm */
+#modalConfirm{
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0,0,0,.35);
+  backdrop-filter: blur(10px);
+}
+#modalConfirm.open{ display:flex; }
+#modalConfirm .mcCard{
+  width: min(520px, 94vw);
+  border-radius: 18px;
+  background: rgba(18,24,40,.92);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow: 0 22px 70px rgba(0,0,0,.45);
+  color: rgba(255,255,255,.94);
+  overflow: hidden;
+}
+#modalConfirm .mcBody{ padding: 16px 16px 12px; font-size: 15px; line-height: 1.35; text-align:center; }
+#modalConfirm .mcActions{ display:flex; gap: 10px; padding: 12px; border-top: 1px solid rgba(255,255,255,.10); }
+#modalConfirm .mcBtn{ flex:1 1 0; height: 44px; border-radius: 12px; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08); color: rgba(255,255,255,.92); font-weight: 800; }
+#modalConfirm .mcBtn.primary{ background: rgba(110,168,254,.22); border-color: rgba(110,168,254,.28); }
+
+/* toast (small notice) */
+#toast{
+  position: fixed;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: translate3d(-50%, 12px, 0);
+  opacity: 0;
+  z-index: 2147483646;
+  max-width: min(520px, calc(100vw - 24px));
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(18,24,40,.88);
+  border: 1px solid rgba(255,255,255,.14);
+  color: rgba(255,255,255,.92);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(0,0,0,.28);
+  font-size: 14px;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+#toast.show{ opacity: 1; transform: translate3d(-50%, 0, 0); }
+
 /* lightbox */
 .lb{ position:fixed; inset:0; z-index:2147483647; background:rgba(0,0,0,.25); display:none; align-items:center; justify-content:center; padding:10px; overscroll-behavior:contain; touch-action: pan-x pan-y pinch-zoom; backdrop-filter: blur(10px); transform:translateZ(0); }
 .lb.open{ display:flex; }

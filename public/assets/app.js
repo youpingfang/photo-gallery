@@ -216,6 +216,8 @@
 
   function enterSelectMode(){
     selectMode = true;
+    // pause masonry screensaver while in selection mode
+    try { if (window.__masonryAutoPause) window.__masonryAutoPause(true); } catch {}
     updateActionBar();
     if ($('enterDelete')) $('enterDelete').textContent = '退出删除模式';
   }
@@ -224,6 +226,8 @@
     selected.clear();
     document.querySelectorAll('.tile.sel').forEach(t => t.classList.remove('sel'));
     updateActionBar();
+    // resume masonry screensaver after leaving selection mode
+    try { if (window.__masonryAutoPause) window.__masonryAutoPause(false); } catch {}
     if ($('enterDelete')) $('enterDelete').textContent = '删除模式';
   }
 
@@ -1263,6 +1267,78 @@
   }
   // metaToggle removed
 
+  // lightweight UI toast (avoid system alert/prompt showing URL in some mobile browsers)
+  let __toastEl = null;
+  function toast(msg, ms = 1600){
+    try {
+      if (!__toastEl) {
+        __toastEl = document.createElement('div');
+        __toastEl.id = 'toast';
+        __toastEl.style.display = 'none';
+        document.body.appendChild(__toastEl);
+      }
+      __toastEl.textContent = String(msg || '');
+      __toastEl.style.display = 'block';
+      __toastEl.classList.remove('show');
+      // reflow
+      void __toastEl.offsetWidth;
+      __toastEl.classList.add('show');
+      clearTimeout(__toastEl.__t);
+      __toastEl.__t = setTimeout(() => {
+        try { __toastEl.classList.remove('show'); } catch {}
+        setTimeout(() => { try { __toastEl.style.display = 'none'; } catch {} }, 180);
+      }, ms);
+    } catch {}
+  }
+
+  // system-like confirm modal (no URL bar, controllable buttons)
+  let __mcEl = null;
+  function confirmModal(message, onOk, opts = {}){
+    const okText = opts.okText || '确定';
+    const cancelText = opts.cancelText || '取消';
+    try {
+      if (!__mcEl) {
+        __mcEl = document.createElement('div');
+        __mcEl.id = 'modalConfirm';
+        __mcEl.innerHTML = '<div class="mcCard">'
+          + '<div class="mcBody" id="mcMsg"></div>'
+          + '<div class="mcActions">'
+          + '<button class="mcBtn" id="mcCancel" type="button"></button>'
+          + '<button class="mcBtn primary" id="mcOk" type="button"></button>'
+          + '</div></div>';
+        document.body.appendChild(__mcEl);
+      }
+      const msgEl = __mcEl.querySelector('#mcMsg');
+      const bCancel = __mcEl.querySelector('#mcCancel');
+      const bOk = __mcEl.querySelector('#mcOk');
+      if (msgEl) msgEl.textContent = String(message || '');
+      if (bCancel) bCancel.textContent = cancelText;
+      if (bOk) bOk.textContent = okText;
+
+      const close = () => {
+        try { __mcEl.classList.remove('open'); } catch {}
+        try { bCancel && bCancel.blur(); } catch {}
+        try { bOk && bOk.blur(); } catch {}
+        try { document.body.style.overflow = ''; } catch {}
+      };
+
+      const onCancel = (e) => { try { e.preventDefault(); } catch {} close(); };
+      const onConfirm = (e) => { try { e.preventDefault(); } catch {} close(); try { if (typeof onOk === 'function') onOk(); } catch {} };
+
+      // reset handlers
+      if (bCancel) bCancel.onclick = onCancel;
+      if (bOk) bOk.onclick = onConfirm;
+      __mcEl.onclick = (e) => { if (e && e.target === __mcEl) close(); };
+
+      // lock background scroll while modal open
+      try { document.body.style.overflow = 'hidden'; } catch {}
+      __mcEl.classList.add('open');
+    } catch {
+      // fallback
+      try { if (confirm(message)) { if (typeof onOk === 'function') onOk(); } } catch {}
+    }
+  }
+
   // delete actions
   on('toggleAll','click', (e) => {
     e.preventDefault();
@@ -1276,48 +1352,64 @@
   on('deleteSel','click', async (e) => {
     e.preventDefault();
     if (!selected.size) return;
-    if (!confirm('确认删除已选 ' + selected.size + ' 张图片？')) return;
+
+    // stop masonry screensaver motion while interacting with delete UI
+    try { if (window.__masonryAutoPause) window.__masonryAutoPause(true); } catch {}
+
     const names = Array.from(selected);
-    if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
 
-    const headers = { 'Content-Type':'application/json' };
+    if (!isAdminUnlocked()) {
+      confirmModal('删除图片请先填写管理密码', () => {
+        try { openSettings(); } catch {}
+        setTimeout(() => { try { if ($('adminPass')) $('adminPass').focus(); } catch {} }, 60);
+      }, { okText:'去填写', cancelText:'取消' });
+      return;
+    }
 
-    const pub = await fetchPublicCfg();
-    if (pub && pub.publicSource === 'immich') {
-      // Immich delete: ids are stored in tile name for immich assets
-      const r = await apiFetch('/api/immich/delete', {
+    confirmModal('确认删除已选 ' + selected.size + ' 张图片？', async () => {
+      const headers = { 'Content-Type':'application/json' };
+
+      const pub = await fetchPublicCfg();
+      if (pub && pub.publicSource === 'immich') {
+        // Immich delete: ids are stored in tile name for immich assets
+        const r = await apiFetch('/api/immich/delete', {
+          method:'POST',
+          headers,
+          body: JSON.stringify({ ids: names })
+        });
+        const j = await r.json();
+        // reload
+        exitSelectMode();
+        await load(currentDir);
+        if (j.failed && j.failed.length) toast('部分删除失败：' + j.failed.length);
+        try { if (window.__masonryAutoPause) window.__masonryAutoPause(false); } catch {}
+        return;
+      }
+
+      // Local delete
+      const url = '/api/delete?dir=' + encodeURIComponent(currentDir);
+      const r = await apiFetch(url, {
         method:'POST',
         headers,
-        body: JSON.stringify({ ids: names })
+        body: JSON.stringify({ dir: currentDir, names })
       });
       const j = await r.json();
       // reload
       exitSelectMode();
       await load(currentDir);
-      if (j.failed && j.failed.length) alert('部分删除失败：' + j.failed.length);
-      return;
-    }
-
-    // Local delete
-    const url = '/api/delete?dir=' + encodeURIComponent(currentDir);
-    const r = await apiFetch(url, {
-      method:'POST',
-      headers,
-      body: JSON.stringify({ dir: currentDir, names })
-    });
-    const j = await r.json();
-    // reload
-    exitSelectMode();
-    await load(currentDir);
-    if (j.failed && j.failed.length) alert('部分删除失败：' + j.failed.length);
+      if (j.failed && j.failed.length) toast('部分删除失败：' + j.failed.length);
+      try { if (window.__masonryAutoPause) window.__masonryAutoPause(false); } catch {}
+    }, { okText:'删除', cancelText:'取消' });
   });
 
   // upload
   function promptAdminForUpload(){
     if (isAdminUnlocked()) return true;
-    alert('请先解锁管理密码');
-    try { openSettings(); } catch {}
-    try { if ($('adminPass')) $('adminPass').focus(); } catch {}
+    confirmModal('上传图片请先填写管理密码', () => {
+      try { openSettings(); } catch {}
+      // slight delay to avoid iOS focus/zoom weirdness
+      setTimeout(() => { try { if ($('adminPass')) $('adminPass').focus(); } catch {} }, 60);
+    }, { okText:'去填写', cancelText:'取消' });
     return false;
   }
 
@@ -1334,7 +1426,7 @@
     if (!files || !files.length) return;
     const fd = new FormData();
     for (const f of files) fd.append('files', f, f.name);
-    if (!isAdminUnlocked()) { alert('请先解锁管理密码'); return; }
+    if (!isAdminUnlocked()) { toast('上传图片请先填写管理密码'); try { openSettings(); } catch {} return; }
 
     const pub = await fetchPublicCfg();
 
@@ -2196,6 +2288,7 @@
           try { window.removeEventListener('keydown', onKey, { capture:true }); } catch {}
           try { if (wheelTimer) clearTimeout(wheelTimer); } catch {}
           try { window.__masonryAutoStop = null; } catch {}
+          try { window.__masonryAutoPause = null; } catch {}
         };
 
         window.addEventListener('pointerdown', onPress, { capture:true, passive:true });
@@ -2207,6 +2300,7 @@
         window.addEventListener('keydown', onKey, { capture:true });
 
         window.__masonryAutoStop = stop;
+        window.__masonryAutoPause = (p) => { paused = !!p; };
 
         const step = (ts) => {
           if (!running) return;
